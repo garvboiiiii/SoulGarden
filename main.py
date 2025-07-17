@@ -70,10 +70,6 @@ def start(message):
 def help_cmd(message):
     bot.send_message(message.chat.id, "Type /start to begin your SoulGarden journey 🌼\nLog memories daily and explore others anonymously.")
 
-@bot.message_handler(func=lambda m: True)
-def catch_all(message):
-    print(f"✅ Catch-all message: {message.text}")
-    bot.reply_to(message, "🌱 Got your message!")
 
 # --- Handle Buttons ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -162,7 +158,6 @@ def leaderboard():
 @app.route("/" + BOT_TOKEN, methods=['POST'])
 def webhook():
     update = telebot.types.Update.de_json(request.get_data(as_text=True))
-    print("📥 Received update:", update)
     bot.process_new_updates([update])
     return "OK", 200
 
