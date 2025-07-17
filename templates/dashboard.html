@@ -1,78 +1,180 @@
-<!-- dashboard.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SoulGarden: Your Memory Garden</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      background: #f8f4f0;
-      font-family: 'Segoe UI', sans-serif;
+    :root {
+      --bg-light: #fdf6f0;
+      --bg-dark: #1e1e1e;
+      --card-light: #ffffff;
+      --card-dark: #2d2d2d;
+      --text-light: #111;
+      --text-dark: #eee;
     }
-    .garden {
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg-light);
+      color: var(--text-light);
+      transition: all 0.3s ease;
+    }
+
+    body.dark {
+      background-color: var(--bg-dark);
+      color: var(--text-dark);
+    }
+
+    .container {
+      padding: 2rem;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .theme-toggle {
+      cursor: pointer;
+      font-size: 1.4rem;
+    }
+
+    .charts {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      margin-top: 2rem;
+    }
+
+    .flower-garden {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
+      margin-top: 3rem;
+      justify-content: center;
     }
-    .memory-card {
-      background: white;
-      border-radius: 16px;
-      padding: 1rem;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      width: 240px;
-    }
+
     .flower {
-      width: 60px;
-      height: 60px;
+      font-size: 2rem;
+      transition: transform 0.3s;
+    }
+
+    .flower:hover {
+      transform: scale(1.2);
+    }
+
+    .memories {
+      margin-top: 2rem;
+    }
+
+    .memory-card {
+      background: var(--card-light);
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 1rem;
+      transition: background 0.3s;
+    }
+
+    body.dark .memory-card {
+      background: var(--card-dark);
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 0.5rem;
     }
   </style>
 </head>
-<body class="container py-4">
-  <h2 class="text-center mb-4">🌱 Welcome to SoulGarden, {{ name }}</h2>
-  <div class="row mb-4">
-    <div class="col-md-4">
-      <canvas id="pointsChart"></canvas>
-    </div>
-    <div class="col-md-8">
-      <h5>Current Streak: {{ streak }} days</h5>
-      <div class="d-flex gap-2">
-        {% for i in range(streak) %}
-          <img src="/static/flower.svg" class="flower" title="Day {{ i+1 }}">
-        {% endfor %}
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🌸 {{ name }}'s SoulGarden</h1>
+      <div class="theme-toggle" onclick="toggleTheme()">
+        <i id="themeIcon" class="fa-solid fa-moon"></i>
       </div>
     </div>
-  </div>
 
-  <h4 class="mt-4">🌸 Your Memories</h4>
-  <div class="garden">
-    {% for m in memories %}
-    <div class="memory-card">
-      <div><strong>{{ m.timestamp[:10] }}</strong></div>
-      <div class="mt-1">{{ m.text }}</div>
-      <div class="mt-1">Mood: {{ m.mood }}</div>
-      {% if m.voice %}
-        <audio controls class="mt-2" src="{{ m.voice }}"></audio>
-      {% endif %}
+    <div class="charts">
+      <canvas id="pointsChart" width="150" height="150"></canvas>
+      <canvas id="streakChart" width="150" height="150"></canvas>
     </div>
-    {% endfor %}
+
+    <div class="flower-garden">
+      {% for mem in memories %}
+        <div class="flower">{{ mem.mood }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="memories">
+      <h2>🧠 Your Memories</h2>
+      {% for mem in memories %}
+        <div class="memory-card">
+          <strong>{{ mem.mood }}</strong> — {{ mem.timestamp }}<br/>
+          <p>{{ mem.text }}</p>
+          {% if mem.voice %}
+            <audio controls>
+              <source src="/{{ mem.voice }}" type="audio/ogg">
+              Your browser does not support the audio tag.
+            </audio>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
   </div>
 
   <script>
-    const ctx = document.getElementById('pointsChart');
-    new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Points', 'Remaining'],
-        datasets: [{
-          label: 'Points',
-          data: [{{ points }}, 1000 - {{ points }}],
-          backgroundColor: ['#4caf50', '#ccc'],
-        }]
+    const points = {{ points }};
+    const streak = {{ streak }};
+
+    const toggleTheme = () => {
+      const body = document.body;
+      const icon = document.getElementById('themeIcon');
+      body.classList.toggle('dark');
+      if (body.classList.contains('dark')) {
+        icon.classList.remove('fa-moon');
+        icon.classList.add('fa-sun');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        icon.classList.remove('fa-sun');
+        icon.classList.add('fa-moon');
+        localStorage.setItem('theme', 'light');
       }
-    });
+    }
+
+    window.onload = () => {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'dark') {
+        document.body.classList.add('dark');
+        document.getElementById('themeIcon').classList.remove('fa-moon');
+        document.getElementById('themeIcon').classList.add('fa-sun');
+      }
+
+      new Chart(document.getElementById('pointsChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Points'],
+          datasets: [{ data: [points, 100 - points], backgroundColor: ['#8bc34a', '#ddd'] }]
+        },
+        options: { plugins: { legend: { display: false } } }
+      });
+
+      new Chart(document.getElementById('streakChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Streak'],
+          datasets: [{ data: [streak, 30 - streak], backgroundColor: ['#ff9800', '#ddd'] }]
+        },
+        options: { plugins: { legend: { display: false } } }
+      });
+    }
   </script>
 </body>
 </html>
