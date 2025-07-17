@@ -115,6 +115,32 @@ def handle_voice(message):
     bot.send_message(user_id, f"🎧 Voice memory saved! Streak: {stats['streak']} days. Points: {stats['points']}")
 
 # --- Webhook ---
+
+@app.route("/explore")
+def explore_gardens():
+    c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
+    user_ids = [r[0] for r in c.fetchall()]
+    
+    gardens = []
+    for uid in user_ids:
+        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 3", (uid,))
+        memories = c.fetchall()
+        gardens.append({
+            "user_id": uid,
+            "memories": memories
+        })
+    
+    return render_template("explore.html", gardens=gardens)
+
+
+
+@app.route("/leaderboard")
+def leaderboard():
+    c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
+    rows = c.fetchall()
+    return render_template("leaderboard.html", users=rows)
+
+
 @app.route("/" + BOT_TOKEN, methods=['POST'])
 def webhook():
     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
