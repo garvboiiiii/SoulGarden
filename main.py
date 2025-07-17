@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS memories (
 """)
 conn.commit()
 
+# --- Temp Store ---
+user_memory_temp = {}
+
 # --- Buttons ---
 def menu_buttons(user_id):
     markup = InlineKeyboardMarkup(row_width=2)
@@ -46,7 +49,7 @@ def menu_buttons(user_id):
     )
     return markup
 
-# --- Bot Start ---
+# --- Start Command ---
 @bot.message_handler(commands=['start'])
 def start(message):
     print("✅ Received /start") 
@@ -65,13 +68,11 @@ def start(message):
         parse_mode='HTML'
     )
 
-
 @bot.message_handler(commands=['help'])
 def help_cmd(message):
     bot.send_message(message.chat.id, "Type /start to begin your SoulGarden journey 🌼\nLog memories daily and explore others anonymously.")
 
-
-# --- Handle Buttons ---
+# --- Button Handler ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     user_id = call.from_user.id
@@ -98,30 +99,47 @@ def handle_buttons(call):
     elif call.data == "about":
         bot.send_message(user_id, "💫 *About SoulGarden:*\nThis is a safe space to log thoughts anonymously. Every memory helps grow your unique garden.🌼\n\nEarn 🌱 for streaks. Voice, emojis, and plants included.\nBuilt with love 💜", parse_mode="Markdown")
 
-# --- Text Memory ---
+# --- Text Memory Handler ---
 def handle_memory(message):
     user_id = message.from_user.id
     text = message.text.strip()
     if not text:
         bot.send_message(user_id, "❗Please type something to log.")
         return
+
+    # Store text temporarily for mood selection
+    user_memory_temp[user_id] = text
+
     markup = InlineKeyboardMarkup()
-    safe_text = text.replace("|", " ").strip()[:100]
-    
     for mood in ["😊", "😔", "🤯", "💡", "😴"]:
-        markup.add(InlineKeyboardButton(mood, callback_data=f"mood|{mood}|{text}"))
+        markup.add(InlineKeyboardButton(mood, callback_data=f"mood|{mood}"))
+
     bot.send_message(user_id, "💬 Choose a mood for this memory:", reply_markup=markup)
 
+# --- Mood Selection Handler ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("mood|"))
 def handle_mood(call):
-    print(f"💬 Mood callback received: {call.data}")
     user_id = call.from_user.id
-    _, mood, text = call.data.split("|", 2)
+    mood = call.data.split("|", 1)[1]
+
+    # Retrieve the stored memory
+    text = user_memory_temp.get(user_id)
+    if not text:
+        bot.send_message(user_id, "❗Memory expired. Please log again.")
+        return
+
     log_memory(user_id, text, mood)
     stats = get_user_stats(user_id)
-    bot.send_message(user_id, f"🌱 Memory logged! You're on a {stats['streak']} day streak.\nTotal Points: {stats['points']}")
 
-# --- Voice Notes ---
+    # Clean up the temp store
+    user_memory_temp.pop(user_id, None)
+
+    bot.send_message(
+        user_id,
+        f"🌱 Memory logged! You're on a {stats['streak']} day streak.\nTotal Points: {stats['points']}"
+    )
+
+# --- Voice Note Handler ---
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
     user_id = message.from_user.id
@@ -138,7 +156,7 @@ def handle_voice(message):
     stats = get_user_stats(user_id)
     bot.send_message(user_id, f"🎧 Voice memory saved! Streak: {stats['streak']} days. Points: {stats['points']}")
 
-# --- Webhook ---
+# --- Flask Routes ---
 @app.route("/explore")
 def explore_gardens():
     c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
@@ -163,7 +181,6 @@ def webhook():
     update = telebot.types.Update.de_json(request.get_data(as_text=True))
     bot.process_new_updates([update])
     return "OK", 200
-
 
 @app.route("/")
 def index():
