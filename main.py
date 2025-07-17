@@ -62,7 +62,7 @@ def start(message):
         "📝 Log memories, 🎧 share voice notes, and 🌍 explore thoughts of others anonymously.\n\n"
         "Earn 🌱 by returning daily.\nLet’s grow your garden together!",
         reply_markup=menu_buttons(user_id),
-        parse_mode='Markdown'
+        parse_mode='HTML'
     )
 
 
