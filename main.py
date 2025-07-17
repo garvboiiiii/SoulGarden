@@ -106,6 +106,8 @@ def handle_memory(message):
         bot.send_message(user_id, "❗Please type something to log.")
         return
     markup = InlineKeyboardMarkup()
+    safe_text = text.replace("|", " ").strip()[:100]
+    
     for mood in ["😊", "😔", "🤯", "💡", "😴"]:
         markup.add(InlineKeyboardButton(mood, callback_data=f"mood|{mood}|{text}"))
     bot.send_message(user_id, "💬 Choose a mood for this memory:", reply_markup=markup)
