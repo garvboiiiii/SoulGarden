@@ -63,11 +63,13 @@
 
     .flower {
       font-size: 2rem;
-      transition: transform 0.3s;
+      animation: float 3s ease-in-out infinite;
     }
 
-    .flower:hover {
-      transform: scale(1.2);
+    @keyframes float {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+      100% { transform: translateY(0); }
     }
 
     .memories {
@@ -85,6 +87,11 @@
 
     body.dark .memory-card {
       background: var(--card-dark);
+    }
+
+    .flower-icon {
+      margin-right: 0.5rem;
+      font-size: 1.2em;
     }
 
     audio {
@@ -109,21 +116,45 @@
 
     <div class="flower-garden">
       {% for mem in memories %}
-        <div class="flower">{{ mem.mood }}</div>
+        <div class="flower">
+          {% if mem.mood == "😊" %} 🌻
+          {% elif mem.mood == "😔" %} 🥀
+          {% elif mem.mood == "🤯" %} 🌪️
+          {% elif mem.mood == "💡" %} 🌼
+          {% elif mem.mood == "😴" %} 🌙
+          {% elif mem.mood == "🎤" %} 🎧
+          {% else %} 🌱
+          {% endif %}
+        </div>
       {% endfor %}
     </div>
 
     <div class="memories">
       <h2>🧠 Your Memories</h2>
-      {% for mem in memories %}
+
+      {% if memories|length == 0 %}
+        <p>🌱 You haven’t logged any memories yet. Use the bot to plant your first one!</p>
+      {% endif %}
+
+      {% for m in memories %}
         <div class="memory-card">
-          <strong>{{ mem.mood }}</strong> — {{ mem.timestamp }}<br/>
-          <p>{{ mem.text }}</p>
-          {% if mem.voice %}
-            <audio controls>
-              <source src="/{{ mem.voice }}" type="audio/ogg">
-              Your browser does not support the audio tag.
-            </audio>
+          <p><strong>{{ m.timestamp }}</strong></p>
+          <p>
+            <span class="flower-icon">
+              {% if m.mood == "😊" %} 🌻
+              {% elif m.mood == "😔" %} 🥀
+              {% elif m.mood == "🤯" %} 🌪️
+              {% elif m.mood == "💡" %} 🌼
+              {% elif m.mood == "😴" %} 🌙
+              {% elif m.mood == "🎤" %} 🎧
+              {% else %} 🌱
+              {% endif %}
+            </span>
+            {{ m.text }}
+          </p>
+
+          {% if m.voice %}
+            <audio controls src="{{ url_for('static', filename=m.voice) }}"></audio>
           {% endif %}
         </div>
       {% endfor %}
