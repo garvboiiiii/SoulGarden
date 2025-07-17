@@ -1,21 +1,105 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>{{ name }}'s Garden</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoulGarden - Your Memory Garden</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(to bottom, #dbeafe, #f0fdf4);
+      color: #1f2937;
+      padding: 20px;
+    }
+    header {
+      text-align: center;
+      padding-bottom: 20px;
+    }
+    .garden-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+    .plant-card {
+      background: white;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      transition: transform 0.2s ease;
+    }
+    .plant-card:hover {
+      transform: scale(1.03);
+    }
+    .plant-card img {
+      max-width: 100%;
+      border-radius: 12px;
+    }
+    .plant-name {
+      font-weight: 600;
+      font-size: 1.2em;
+      margin-top: 10px;
+    }
+    .points-btn, .voice-btn {
+      background: #4ade80;
+      border: none;
+      color: white;
+      font-weight: 600;
+      padding: 12px 20px;
+      border-radius: 30px;
+      cursor: pointer;
+      margin: 10px 5px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .voice-btn {
+      background: #60a5fa;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 0.9em;
+      color: #6b7280;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🌸 {{ name }}'s Soul Garden</h1>
-        <p><strong>Points:</strong> {{ points }}</p>
-        <hr>
-        {% for e in entries %}
-            <div class="memory">
-                <p>{{ e[0] }}</p>
-                <small>{{ e[2] }}</small>
-            </div>
-        {% endfor %}
+  <header>
+<h1>🌱{{username}}'s SoulGarden</h1>
+    <p>Each memory you plant helps your garden grow.</p>
+    <button class="points-btn">🌸 My Points</button>
+    <button class="voice-btn">🎙️ Record Memory</button>
+  </header>
+
+  <section class="garden-container">
+    <div class="plant-card">
+      <img src="https://i.ibb.co/WG6Yg3t/lotus.png" alt="Lotus of Reflection">
+      <div class="plant-name">Lotus of Reflection</div>
+      <p>A rare flower that blooms with each heartfelt voice note.</p>
     </div>
+    <div class="plant-card">
+      <img src="https://i.ibb.co/fnvZ7YZ/daisy.png" alt="Daisy of Joy">
+      <div class="plant-name">Daisy of Joy</div>
+      <p>Appears when you log a cheerful memory.</p>
+    </div>
+    <div class="plant-card">
+      <img src="https://i.ibb.co/WgFrYhC/mint.png" alt="Mint of Clarity">
+      <div class="plant-name">Mint of Clarity</div>
+      <p>Represents mindful entries and clear thoughts.</p>
+    </div>
+  </section>
+
+  <footer>
+    Built with Love🌿 by SoulGarden Team
+  </footer>
+
+  <script>
+    document.querySelector('.points-btn').onclick = () => {
+      alert("You have 120 🌸 points!");
+    };
+    document.querySelector('.voice-btn').onclick = () => {
+      alert("Voice recording feature coming soon!");
+    };
+  </script>
 </body>
 </html>
