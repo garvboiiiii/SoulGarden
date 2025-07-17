@@ -1,55 +1,61 @@
 # utils.py
 import sqlite3
-from datetime import datetime, timedelta
+import datetime
 
-conn = sqlite3.connect("data.db", check_same_thread=False)
-c = conn.cursor()
+db_path = "garden.db"
 
-def get_today():
-    return datetime.utcnow().strftime("%Y-%m-%d")
+def log_memory(user_id, text, mood, voice_path=None):
+    now = datetime.datetime.now().isoformat()
+    with sqlite3.connect(db_path) as conn:
+        c = conn.cursor()
 
-def get_yesterday():
-    return (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+        # Insert memory
+        c.execute("INSERT INTO memories (user_id, text, mood, timestamp, voice_path) VALUES (?, ?, ?, ?, ?)",
+                  (user_id, text, mood, now, voice_path))
 
-def log_memory(user_id):
-    today = get_today()
-    c.execute("SELECT last_logged, streak FROM users WHERE id = ?", (user_id,))
-    result = c.fetchone()
+        # Update streak logic
+        c.execute("SELECT last_entry, streak, points FROM users WHERE id = ?", (user_id,))
+        row = c.fetchone()
+        if row:
+            last_entry, current_streak, current_points = row
+            today = datetime.datetime.now().date()
+            if last_entry:
+                last_date = datetime.datetime.fromisoformat(last_entry).date()
+                diff = (today - last_date).days
 
-    if not result:
-        c.execute("INSERT INTO users (id, last_logged, streak, points) VALUES (?, ?, 1, 5)", (user_id, today))
-    else:
-        last_logged, streak = result
-        if last_logged == today:
-            return  # Already logged today
-        elif last_logged == get_yesterday():
-            streak += 1
-        else:
-            streak = 1
+                if diff == 1:
+                    new_streak = current_streak + 1
+                elif diff == 0:
+                    new_streak = current_streak
+                else:
+                    new_streak = 1
+            else:
+                new_streak = 1
 
-        c.execute("UPDATE users SET last_logged = ?, streak = ?, points = points + 5 WHERE id = ?", (today, streak, user_id))
-    conn.commit()
+            # 1 point per memory, + bonus every 5 streak
+            bonus = 2 if new_streak % 5 == 0 else 0
+            new_points = current_points + 1 + bonus
 
-def get_user_data(user_id):
-    c.execute("SELECT streak, points FROM users WHERE id = ?", (user_id,))
-    return c.fetchone() or (0, 0)
+            c.execute("UPDATE users SET last_entry = ?, streak = ?, points = ? WHERE id = ?",
+                      (now, new_streak, new_points, user_id))
+        conn.commit()
 
-def save_memory(user_id, mood, text):
-    today = get_today()
-    c.execute("INSERT INTO memories (user_id, mood, text, date) VALUES (?, ?, ?, ?)", (user_id, mood, text, today))
-    conn.commit()
-    log_memory(user_id)
+def get_user_stats(user_id):
+    with sqlite3.connect(db_path) as conn:
+        c = conn.cursor()
+        c.execute("SELECT streak, points FROM users WHERE id = ?", (user_id,))
+        row = c.fetchone()
+        return {"streak": row[0], "points": row[1]} if row else {"streak": 0, "points": 0}
 
-def save_voice(user_id, file_id):
-    today = get_today()
-    c.execute("INSERT INTO voices (user_id, file_id, date) VALUES (?, ?, ?)", (user_id, file_id, today))
-    conn.commit()
-    log_memory(user_id)
+def calculate_streak(user_id):
+    with sqlite3.connect(db_path) as conn:
+        c = conn.cursor()
+        c.execute("SELECT streak FROM users WHERE id = ?", (user_id,))
+        row = c.fetchone()
+        return row[0] if row else 0
 
-def get_memories(user_id):
-    c.execute("SELECT mood, text, date FROM memories WHERE user_id = ? ORDER BY date DESC", (user_id,))
-    return c.fetchall()
-
-def get_voices(user_id):
-    c.execute("SELECT file_id, date FROM voices WHERE user_id = ? ORDER BY date DESC", (user_id,))
-    return c.fetchall()
+def get_other_memories(user_id):
+    with sqlite3.connect(db_path) as conn:
+        c = conn.cursor()
+        c.execute("SELECT user_id, text, mood FROM memories WHERE user_id != ? ORDER BY RANDOM() LIMIT 10", (user_id,))
+        return c.fetchall()
