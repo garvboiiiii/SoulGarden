@@ -114,6 +114,7 @@ def handle_memory(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("mood|"))
 def handle_mood(call):
+    print(f"💬 Mood callback received: {call.data}")
     user_id = call.from_user.id
     _, mood, text = call.data.split("|", 2)
     log_memory(user_id, text, mood)
