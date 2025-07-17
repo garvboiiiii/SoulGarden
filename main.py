@@ -156,8 +156,12 @@ def leaderboard():
 
 @app.route("/" + BOT_TOKEN, methods=['POST'])
 def webhook():
-    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
-    return "", 200
+    update = telebot.types.Update.de_json(request.get_data(as_text=True))
+    bot.process_new_updates([update])
+    return "OK", 200
+    
+    print("📥 Received update:", update)
+
 
 @app.route("/")
 def index():
