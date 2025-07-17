@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ name }}'s Garden</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🌸 {{ name }}'s Soul Garden</h1>
+        <p><strong>Points:</strong> {{ points }}</p>
+        <hr>
+        {% for e in entries %}
+            <div class="memory">
+                <p>{{ e[0] }}</p>
+                <small>{{ e[2] }}</small>
+            </div>
+        {% endfor %}
+    </div>
+</body>
+</html>
