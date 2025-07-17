@@ -50,18 +50,20 @@ def menu_buttons(user_id):
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
-    username = (message.from_user.username or f"user{user_id}").replace(" ", "_")
+    username = message.from_user.username or f"user{user_id}"
     c.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
 
-   bot.send_message(
-    user_id,
-    f"🌸 Welcome to *SoulGarden*, @{username}!\n\n"
-    "🪴 This is your peaceful space to grow mentally.\n"
-    "📝 Log memories, 🎧 share voice notes, and 🌍 explore thoughts of others anonymously.\n\n"
-    "Earn 🌱 by returning daily.\nLet’s grow your garden together!",
-    reply_markup=menu_buttons(user_id),
-    parse_mode='Markdown')
+    bot.send_message(
+        user_id,
+        f"🌸 Welcome to *SoulGarden*, @{username}!\n\n"
+        "🪴 This is your peaceful space to grow mentally.\n"
+        "📝 Log memories, 🎧 share voice notes, and 🌍 explore thoughts of others anonymously.\n\n"
+        "Earn 🌱 by returning daily.\nLet’s grow your garden together!",
+        reply_markup=menu_buttons(user_id),
+        parse_mode='Markdown'
+    )
+
 
 @bot.message_handler(commands=['help'])
 def help_cmd(message):
