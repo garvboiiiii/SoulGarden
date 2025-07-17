@@ -49,11 +49,12 @@ def menu_buttons(user_id):
 # --- Bot Start ---
 @bot.message_handler(commands=['start'])
 def start(message):
+    print("✅ Received /start") 
     user_id = message.from_user.id
     username = message.from_user.username or f"user{user_id}"
     c.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
-
+    
     bot.send_message(
         user_id,
         f"🌸 Welcome to *SoulGarden*, @{username}!\n\n"
