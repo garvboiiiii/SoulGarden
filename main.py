@@ -3,7 +3,7 @@ import sqlite3
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from flask import Flask, request, render_template
-from utils import log_memory, get_user_stats, get_other_memories
+from utils import log_memory, get_user_stats, get_other_memories , calculate_streak
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -41,10 +41,16 @@ def start(message):
 
     bot.send_message(
         user_id,
-        f"🌸 Welcome to *SoulGarden*, @{username}!\nHere, your thoughts blossom.\n\nYou earn 🌱 by logging daily memories. Let’s grow together.",
+        f"🌸 Welcome to *SoulGarden*, @{username}!\n\n🪴 This is your peaceful space to grow mentally.\n📝 Log memories, 🎧 share voice notes, and 🌍 explore thoughts of others anonymously.\n\nEarn 🌱 by returning daily.\nLet’s grow your garden together!"
+,
         reply_markup=menu_buttons(user_id),
         parse_mode='Markdown'
     )
+
+@bot.message_handler(commands=['help'])
+def help_cmd(message):
+    bot.send_message(message.chat.id, "Type /start to begin your SoulGarden journey 🌼\nLog memories daily and explore others anonymously.")
+
 
 # --- Handle Buttons ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -117,6 +123,34 @@ def webhook():
 @app.route("/")
 def index():
     return "🌸 SoulGarden Bot is alive."
+
+@app.route("/dashboard/<int:user_id>")
+def dashboard(user_id):
+    # Get user info
+    c.execute("SELECT username, points FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    if not user:
+        return "User not found", 404
+
+    name, points = user
+    streak = calculate_streak(user_id)
+
+    # Get memories
+    c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
+    memories_raw = c.fetchall()
+
+    memories = [{
+        "text": row[0],
+        "mood": row[1],
+        "timestamp": row[2],
+        "voice": row[3] if row[3] else None
+    } for row in memories_raw]
+
+    return render_template("dashboard.html",
+                           name=name,
+                           points=points,
+                           streak=streak,
+                           memories=memories)
 
 # --- Run ---
 if __name__ == "__main__":
