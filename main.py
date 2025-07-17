@@ -1,108 +1,113 @@
 # main.py
+
 import os
 import sqlite3
-from flask import Flask, request, render_template, redirect, url_for, jsonify
+from datetime import datetime
+from flask import Flask, request, render_template, jsonify
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from datetime import datetime, timedelta
-from utils import get_streak, award_points, store_memory
+from utils import log_memory, get_streak_data, add_voice_memory
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Database
-conn = sqlite3.connect("garden.db", check_same_thread=False)
+# Database Setup
+conn = sqlite3.connect("data.db", check_same_thread=False)
 c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
-    username TEXT,
-    points INTEGER DEFAULT 0,
-    last_log DATE
-)''')
-c.execute('''CREATE TABLE IF NOT EXISTS memories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    text TEXT,
-    mood TEXT,
-    date DATE,
-    voice TEXT
-)''')
+c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
+        username TEXT,
+        streak INTEGER DEFAULT 0,
+        last_log TEXT,
+        points INTEGER DEFAULT 0
+    )
+""")
+c.execute("""
+    CREATE TABLE IF NOT EXISTS memories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        mood TEXT,
+        text TEXT,
+        voice TEXT,
+        timestamp TEXT
+    )
+""")
 conn.commit()
 
-# Bot UI
-
-def main_buttons():
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton("📝 Log Memory", callback_data="log_memory"),
-        InlineKeyboardButton("🌼 My Garden", web_app=WebAppInfo(url=f"{WEBHOOK_URL}/dashboard")),
-        InlineKeyboardButton("❓ About", callback_data="about")
-    )
-    return markup
-
+# --- Bot Commands ---
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
     username = message.from_user.first_name
     c.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
+    welcome_msg = f"🌱 *Welcome to SoulGarden, {username}!*\n\nHere, you plant memories daily and watch your garden grow.\n\nLog your mood, record your thoughts, and earn 🌼 points to evolve your soul garden."
+    bot.send_message(user_id, welcome_msg, reply_markup=main_menu(user_id), parse_mode="Markdown")
 
-    bot.send_message(
-        user_id,
-        f"🌱 Welcome *{username}* to *SoulGarden*!\n\nPlant memories daily. Grow your digital soul garden.",
-        reply_markup=main_buttons(),
-        parse_mode="Markdown"
+@bot.message_handler(commands=['about'])
+def about(message):
+    bot.send_message(message.chat.id, "🌿 *SoulGarden* is your emotional memory garden.\nEach day you log your mood, your garden grows with flowers.\nEarn 🌼 points for consistency and bloom your own soul forest!", parse_mode="Markdown")
+
+# --- Keyboard Buttons ---
+def main_menu(user_id):
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("🌼 Add Memory", callback_data="log_memory"),
+        InlineKeyboardButton("📈 View Garden", web_app=WebAppInfo(url=f"{WEBHOOK_URL}/dashboard/{user_id}")),
+        InlineKeyboardButton("🎧 Add Voice", callback_data="add_voice"),
+        InlineKeyboardButton("🧠 About", callback_data="about")
     )
+    return markup
 
+# --- Callback Queries ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     user_id = call.from_user.id
 
     if call.data == "log_memory":
-        bot.send_message(user_id, "🌸 What's your memory today? You can also send a voice note optionally.")
-        bot.register_next_step_handler(call.message, get_memory_text)
+        bot.send_message(user_id, "📝 What's your memory today? Start with your mood (happy, sad, angry, etc.)")
+        bot.register_next_step_handler(call.message, process_mood)
+
+    elif call.data == "add_voice":
+        bot.send_message(user_id, "🎤 Send a voice note to add a memory.")
 
     elif call.data == "about":
-        bot.send_message(user_id, "🧠 *SoulGarden* lets you store daily reflections as flowers in a garden.\n🎧 Send text or voice.\n🎯 Earn points for daily logging.\n🌸 Grow streaks and your own personal digital sanctuary.", parse_mode="Markdown")
+        about(call.message)
 
-def get_memory_text(message):
+# --- Mood and Text Logging ---
+def process_mood(message):
     user_id = message.from_user.id
-    text = message.text
+    mood = message.text.strip()
+    bot.send_message(user_id, f"💬 Great! Now tell me your memory for today under that mood '{mood}'.")
+    bot.register_next_step_handler(message, lambda m: save_memory(m, mood))
 
-    # Ask for mood
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton("😊", callback_data=f"mood_happy|{text}"),
-        InlineKeyboardButton("😢", callback_data=f"mood_sad|{text}"),
-        InlineKeyboardButton("😐", callback_data=f"mood_neutral|{text}")
-    )
-    bot.send_message(user_id, "What was the mood?", reply_markup=markup)
+def save_memory(message, mood):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    log_memory(user_id, mood, text)
+    bot.send_message(user_id, "🌸 Memory logged successfully! Keep growing your SoulGarden.", reply_markup=main_menu(user_id))
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("mood_"))
-def handle_mood(call):
-    user_id = call.from_user.id
-    mood, text = call.data.split("|")
-    mood = mood.replace("mood_", "")
-
-    store_memory(user_id, text, mood)
-    award_points(user_id)
-    bot.send_message(user_id, f"🌼 Memory saved with mood *{mood}*. Points awarded!", parse_mode="Markdown")
-
+# --- Voice Notes ---
 @bot.message_handler(content_types=['voice'])
-def handle_voice(message):
+def receive_voice(message):
     user_id = message.from_user.id
-    file_info = bot.get_file(message.voice.file_id)
-    file_path = file_info.file_path
-    file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+    file_id = message.voice.file_id
+    add_voice_memory(user_id, file_id)
+    bot.send_message(user_id, "🎧 Voice memory saved to your garden.")
 
-    text = "Voice Memory"
-    mood = "neutral"
-    store_memory(user_id, text, mood, voice_url=file_url)
-    award_points(user_id)
-    bot.send_message(user_id, "🎧 Voice memory saved. 🌸")
+# --- Web Dashboard ---
+@app.route("/dashboard/<int:user_id>")
+def dashboard(user_id):
+    streak_data = get_streak_data(user_id)
+    c.execute("SELECT username, points FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    c.execute("SELECT mood, text, timestamp, voice FROM memories WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
+    memories = c.fetchall()
+    return render_template("dashboard.html", user=user, streak_data=streak_data, memories=memories, user_id=user_id)
 
 @app.route("/" + BOT_TOKEN, methods=['POST'])
 def webhook():
@@ -111,14 +116,9 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "🌱 SoulGarden Bot running."
+    return "🌷 SoulGarden Bot is running."
 
-@app.route("/dashboard")
-def dashboard():
-    c.execute("SELECT users.username, users.points, users.last_log, memories.text, memories.mood, memories.date, memories.voice FROM users JOIN memories ON users.id = memories.user_id ORDER BY memories.date DESC")
-    data = c.fetchall()
-    return render_template("dashboard.html", data=data)
-
+# --- Start ---
 if __name__ == '__main__':
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
