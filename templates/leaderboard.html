@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>🌿 SoulGarden Leaderboard</title>
+</head>
+<body>
+  <h1>🏆 Gardeners with the Most 🌱</h1>
+  <ul>
+    {% for user, points in users %}
+      <li>@{{ user }} — {{ points }} pts</li>
+    {% endfor %}
+  </ul>
+</body>
+</html>
