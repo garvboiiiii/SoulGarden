@@ -1,0 +1,9 @@
+<h1>🌍 Explore SoulGardens</h1>
+{% for g in gardens %}
+  <div class="card">
+    <h3>Anonymous Garden 🌱</h3>
+    {% for text, mood, timestamp in g.memories %}
+      <p>{{ mood }} {{ text }} ({{ timestamp }})</p>
+    {% endfor %}
+  </div>
+{% endfor %}
