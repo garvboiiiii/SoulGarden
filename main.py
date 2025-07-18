@@ -190,9 +190,17 @@ def leaderboard():
 
 @app.route("/" + BOT_TOKEN, methods=['POST'])
 def webhook():
-    update = telebot.types.Update.de_json(request.get_data(as_text=True))
-    bot.process_new_updates([update])
+    try:
+        data = request.get_json(force=True)
+        if not data or 'update_id' not in data:
+            return "Invalid data", 400  # Ignore non-Telegram requests
+        update = telebot.types.Update.de_json(data)
+        bot.process_new_updates([update])
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return "Error", 500
     return "OK", 200
+
 
 @app.route("/")
 def index():
