@@ -192,14 +192,20 @@ def leaderboard():
 def webhook():
     try:
         data = request.get_json(force=True)
+
+        # Validate it's a Telegram update (it must contain 'update_id')
         if not data or 'update_id' not in data:
-            return "Invalid data", 400  # Ignore non-Telegram requests
+            print("⚠️ Invalid request: No update_id")
+            return "Invalid data", 400
+
         update = telebot.types.Update.de_json(data)
         bot.process_new_updates([update])
     except Exception as e:
-        print(f"Webhook error: {e}")
+        print(f"❌ Webhook error: {e}")
         return "Error", 500
+
     return "OK", 200
+
 
 
 @app.route("/")
