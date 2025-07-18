@@ -184,7 +184,7 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "🌸 SoulGarden Bot is alive."
+    return "🌸 SoulGarden Bot is running."
 
 @app.route("/dashboard/<int:user_id>")
 def dashboard(user_id):
@@ -211,4 +211,4 @@ def dashboard(user_id):
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=8080)
