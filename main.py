@@ -6,12 +6,12 @@ from flask import Flask, request, render_template
 from utils import log_memory, get_user_stats, get_other_memories, calculate_streak
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g., https://your-app-name.up.railway.app
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__, static_folder="static")
 
-# --- DB Setup ---
+# --- SQLite DB ---
 conn = sqlite3.connect("garden.db", check_same_thread=False)
 c = conn.cursor()
 c.execute("""
@@ -34,10 +34,10 @@ CREATE TABLE IF NOT EXISTS memories (
 """)
 conn.commit()
 
-# --- Temp Store ---
+# --- Temp memory holder ---
 user_memory_temp = {}
 
-# --- Buttons ---
+# --- Inline Button UI ---
 def menu_buttons(user_id):
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -49,15 +49,13 @@ def menu_buttons(user_id):
     )
     return markup
 
-# --- Start Command ---
+# --- Commands ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    print("✅ Received /start") 
     user_id = message.from_user.id
     username = message.from_user.username or f"user{user_id}"
     c.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
-    
     bot.send_message(
         user_id,
         f"🌸 Welcome to *SoulGarden*, @{username}!\n\n"
@@ -72,7 +70,26 @@ def start(message):
 def help_cmd(message):
     bot.send_message(message.chat.id, "Type /start to begin your SoulGarden journey 🌼\nLog memories daily and explore others anonymously.")
 
-# --- Button Handler ---
+# --- Callback Queries ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("mood|"))
+def handle_mood(call):
+    user_id = call.from_user.id
+    mood = call.data.split("|", 1)[1]
+
+    text = user_memory_temp.get(user_id)
+    if not text:
+        bot.send_message(user_id, "❗Memory expired. Please log again.")
+        return
+
+    log_memory(user_id, text, mood)
+    stats = get_user_stats(user_id)
+
+    user_memory_temp.pop(user_id, None)
+    bot.send_message(
+        user_id,
+        f"🌱 Memory logged! You're on a {stats['streak']} day streak.\nTotal Points: {stats['points']}"
+    )
+
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     user_id = call.from_user.id
@@ -87,8 +104,7 @@ def handle_buttons(call):
     elif call.data == "explore":
         memories = get_other_memories(user_id)
         if not memories:
-            bot.send_message(user_id, "🌱 No public memories to show yet.")
-            return
+            return bot.send_message(user_id, "🌱 No public memories to show yet.")
 
         text = "🌍 *Anonymous Memories from Other Gardens:*\n\n"
         for mem in memories:
@@ -99,7 +115,7 @@ def handle_buttons(call):
     elif call.data == "about":
         bot.send_message(user_id, "💫 *About SoulGarden:*\nThis is a safe space to log thoughts anonymously. Every memory helps grow your unique garden.🌼\n\nEarn 🌱 for streaks. Voice, emojis, and plants included.\nBuilt with love 💜", parse_mode="Markdown")
 
-# --- Text Memory Handler ---
+# --- Handle Text Input ---
 def handle_memory(message):
     user_id = message.from_user.id
     text = message.text.strip()
@@ -107,39 +123,14 @@ def handle_memory(message):
         bot.send_message(user_id, "❗Please type something to log.")
         return
 
-    # Store text temporarily for mood selection
     user_memory_temp[user_id] = text
-
     markup = InlineKeyboardMarkup()
     for mood in ["😊", "😔", "🤯", "💡", "😴"]:
         markup.add(InlineKeyboardButton(mood, callback_data=f"mood|{mood}"))
 
     bot.send_message(user_id, "💬 Choose a mood for this memory:", reply_markup=markup)
 
-# --- Mood Selection Handler ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("mood|"))
-def handle_mood(call):
-    user_id = call.from_user.id
-    mood = call.data.split("|", 1)[1]
-
-    # Retrieve the stored memory
-    text = user_memory_temp.get(user_id)
-    if not text:
-        bot.send_message(user_id, "❗Memory expired. Please log again.")
-        return
-
-    log_memory(user_id, text, mood)
-    stats = get_user_stats(user_id)
-
-    # Clean up the temp store
-    user_memory_temp.pop(user_id, None)
-
-    bot.send_message(
-        user_id,
-        f"🌱 Memory logged! You're on a {stats['streak']} day streak.\nTotal Points: {stats['points']}"
-    )
-
-# --- Voice Note Handler ---
+# --- Voice Handler ---
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
     user_id = message.from_user.id
@@ -154,38 +145,9 @@ def handle_voice(message):
 
     log_memory(user_id, "(voice note)", "🎧", voice_path=filename)
     stats = get_user_stats(user_id)
-    bot.send_message(user_id, f"🎧 Voice memory saved! Streak: {stats['streak']} days. Points: {stats['points']}")
+    bot.send_message(user_id, f"🎧 Voice memory saved!\n🌿 Streak: {stats['streak']} days | Points: {stats['points']}")
 
-# --- Flask Routes ---
-@app.route("/explore")
-def explore_gardens():
-    c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
-    user_ids = [r[0] for r in c.fetchall()]
-
-    gardens = []
-    for uid in user_ids:
-        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 3", (uid,))
-        memories = c.fetchall()
-        gardens.append({"user_id": uid, "memories": memories})
-
-    return render_template("explore.html", gardens=gardens)
-
-@app.route("/leaderboard")
-def leaderboard():
-    c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
-    rows = c.fetchall()
-    return render_template("leaderboard.html", users=rows)
-
-@app.route("/" + BOT_TOKEN, methods=['POST'])
-def webhook():
-    update = telebot.types.Update.de_json(request.get_data(as_text=True))
-    bot.process_new_updates([update])
-    return "OK", 200
-
-@app.route("/")
-def index():
-    return "🌸 SoulGarden Bot is running."
-
+# --- Flask Web Pages ---
 @app.route("/dashboard/<int:user_id>")
 def dashboard(user_id):
     c.execute("SELECT username, points FROM users WHERE id = ?", (user_id,))
@@ -207,7 +169,36 @@ def dashboard(user_id):
 
     return render_template("dashboard.html", name=name, points=points, streak=streak, memories=memories)
 
-# --- Run ---
+@app.route("/explore")
+def explore_gardens():
+    c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
+    user_ids = [r[0] for r in c.fetchall()]
+    gardens = []
+
+    for uid in user_ids:
+        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 3", (uid,))
+        mems = c.fetchall()
+        gardens.append({"user_id": uid, "memories": mems})
+
+    return render_template("explore.html", gardens=gardens)
+
+@app.route("/leaderboard")
+def leaderboard():
+    c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
+    rows = c.fetchall()
+    return render_template("leaderboard.html", users=rows)
+
+@app.route("/" + BOT_TOKEN, methods=['POST'])
+def webhook():
+    update = telebot.types.Update.de_json(request.get_data(as_text=True))
+    bot.process_new_updates([update])
+    return "OK", 200
+
+@app.route("/")
+def index():
+    return "🌸 SoulGarden Bot is running."
+
+# --- Start ---
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
