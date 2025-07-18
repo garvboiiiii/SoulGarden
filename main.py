@@ -1,17 +1,18 @@
 import os
 import sqlite3
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from flask import Flask, request, render_template
 from utils import log_memory, get_user_stats, get_other_memories, calculate_streak
 
+# --- Configuration ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g., https://your-app-name.up.railway.app
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 bot = telebot.TeleBot(BOT_TOKEN)
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# --- SQLite DB ---
+# --- Database Setup ---
 conn = sqlite3.connect("garden.db", check_same_thread=False)
 c = conn.cursor()
 c.execute("""
@@ -34,15 +35,28 @@ CREATE TABLE IF NOT EXISTS memories (
 """)
 conn.commit()
 
-# --- Temp memory holder ---
+# --- In-Memory Temp Store ---
 user_memory_temp = {}
 
-# --- Inline Button UI ---
+# --- Bot Menu ---
+bot.set_my_commands([
+    BotCommand("start", "Start your SoulGarden"),
+    BotCommand("log", "Log a new memory"),
+    BotCommand("voice", "Send a voice memory"),
+    BotCommand("memories", "View your past memories"),
+    BotCommand("leaderboard", "View top users"),
+    BotCommand("explore", "Explore other gardens"),
+    BotCommand("about", "About SoulGarden"),
+    BotCommand("help", "Help with commands")
+])
+
 def menu_buttons(user_id):
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
         InlineKeyboardButton("📝 Log Memory", callback_data="log"),
         InlineKeyboardButton("🎤 Voice Note", callback_data="voice"),
+        InlineKeyboardButton("📜 My Memories", callback_data="memories"),
+        InlineKeyboardButton("🏆 Leaderboard", url=f"{WEBHOOK_URL}/leaderboard"),
         InlineKeyboardButton("🌍 Explore Gardens", callback_data="explore"),
         InlineKeyboardButton("📊 Dashboard", url=f"{WEBHOOK_URL}/dashboard/{user_id}"),
         InlineKeyboardButton("ℹ️ About", callback_data="about")
@@ -56,12 +70,13 @@ def start(message):
     username = message.from_user.username or f"user{user_id}"
     c.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
+
     bot.send_message(
         user_id,
-        f"🌸 Welcome to *SoulGarden*, @{username}!\n\n"
+        f"🌸 Welcome to <b>SoulGarden</b>, @{username}!\n"
         "🪴 This is your peaceful space to grow mentally.\n"
-        "📝 Log memories, 🎧 share voice notes, and 🌍 explore thoughts of others anonymously.\n\n"
-        "Earn 🌱 by returning daily.\nLet’s grow your garden together!",
+        "📝 Log memories, 🎧 share voice notes, and 🌍 explore thoughts of others anonymously.\n"
+        "Earn 🌱 by returning daily.\n\nLet’s grow your garden together!",
         reply_markup=menu_buttons(user_id),
         parse_mode='HTML'
     )
@@ -70,52 +85,58 @@ def start(message):
 def help_cmd(message):
     bot.send_message(message.chat.id, "Type /start to begin your SoulGarden journey 🌼\nLog memories daily and explore others anonymously.")
 
-# --- Callback Queries ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("mood|"))
-def handle_mood(call):
-    user_id = call.from_user.id
-    mood = call.data.split("|", 1)[1]
-
-    text = user_memory_temp.get(user_id)
-    if not text:
-        bot.send_message(user_id, "❗Memory expired. Please log again.")
+@bot.message_handler(commands=['explore'])
+def explore_cmd(message):
+    memories = get_other_memories(message.from_user.id)
+    if not memories:
+        bot.send_message(message.chat.id, "🌱 No public memories to show yet.")
         return
+    text = "🌍 <b>Anonymous Memories from Other Gardens:</b>\n\n"
+    for mem in memories:
+        mood = mem[2]
+        text += f"🧠 {mem[1]} ({mood})\n\n"
+    bot.send_message(message.chat.id, text, parse_mode="HTML")
 
-    log_memory(user_id, text, mood)
-    stats = get_user_stats(user_id)
-
-    user_memory_temp.pop(user_id, None)
+@bot.message_handler(commands=['about'])
+def about_cmd(message):
     bot.send_message(
-        user_id,
-        f"🌱 Memory logged! You're on a {stats['streak']} day streak.\nTotal Points: {stats['points']}"
+        message.chat.id,
+        "💫 <b>About SoulGarden:</b>\nThis is a safe space to log thoughts anonymously. Every memory helps grow your unique garden.🌼\n\n"
+        "Earn 🌱 for streaks. Voice, emojis, and plants included.\nBuilt with love 💜",
+        parse_mode="HTML"
     )
 
+# --- Callback Handler ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     user_id = call.from_user.id
+    data = call.data
 
-    if call.data == "log":
+    if data == "log":
         bot.send_message(user_id, "📝 What's on your mind today?")
         bot.register_next_step_handler(call.message, handle_memory)
 
-    elif call.data == "voice":
+    elif data == "voice":
         bot.send_message(user_id, "🎤 Send your voice memory now.")
 
-    elif call.data == "explore":
-        memories = get_other_memories(user_id)
-        if not memories:
-            return bot.send_message(user_id, "🌱 No public memories to show yet.")
+    elif data == "memories":
+        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (user_id,))
+        rows = c.fetchall()
+        if not rows:
+            bot.send_message(user_id, "📭 No memories logged yet.")
+            return
+        text = "📜 <b>Your Recent Memories:</b>\n\n"
+        for r in rows:
+            text += f"{r[2][:10]} - {r[1]}\n🧠 {r[0]}\n\n"
+        bot.send_message(user_id, text, parse_mode="HTML")
 
-        text = "🌍 *Anonymous Memories from Other Gardens:*\n\n"
-        for mem in memories:
-            mood = mem[2]
-            text += f"🧠 {mem[1]} ({mood})\n\n"
-        bot.send_message(user_id, text, parse_mode="Markdown")
+    elif data == "explore":
+        explore_cmd(call.message)
 
-    elif call.data == "about":
-        bot.send_message(user_id, "💫 *About SoulGarden:*\nThis is a safe space to log thoughts anonymously. Every memory helps grow your unique garden.🌼\n\nEarn 🌱 for streaks. Voice, emojis, and plants included.\nBuilt with love 💜", parse_mode="Markdown")
+    elif data == "about":
+        about_cmd(call.message)
 
-# --- Handle Text Input ---
+# --- Memory Logging ---
 def handle_memory(message):
     user_id = message.from_user.id
     text = message.text.strip()
@@ -130,7 +151,23 @@ def handle_memory(message):
 
     bot.send_message(user_id, "💬 Choose a mood for this memory:", reply_markup=markup)
 
-# --- Voice Handler ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("mood|"))
+def handle_mood(call):
+    user_id = call.from_user.id
+    mood = call.data.split("|", 1)[1]
+
+    text = user_memory_temp.get(user_id)
+    if not text:
+        bot.send_message(user_id, "❗Memory expired. Please log again.")
+        return
+
+    log_memory(user_id, text, mood)
+    stats = get_user_stats(user_id)
+    user_memory_temp.pop(user_id, None)
+
+    bot.send_message(user_id, f"🌱 Memory logged! You're on a {stats['streak']} day streak.\nTotal Points: {stats['points']}")
+
+# --- Voice Note Logging ---
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
     user_id = message.from_user.id
@@ -145,9 +182,9 @@ def handle_voice(message):
 
     log_memory(user_id, "(voice note)", "🎧", voice_path=filename)
     stats = get_user_stats(user_id)
-    bot.send_message(user_id, f"🎧 Voice memory saved!\n🌿 Streak: {stats['streak']} days | Points: {stats['points']}")
+    bot.send_message(user_id, f"🎧 Voice memory saved! Streak: {stats['streak']} days. Points: {stats['points']}")
 
-# --- Flask Web Pages ---
+# --- Web Routes ---
 @app.route("/dashboard/<int:user_id>")
 def dashboard(user_id):
     c.execute("SELECT username, points FROM users WHERE id = ?", (user_id,))
@@ -169,50 +206,37 @@ def dashboard(user_id):
 
     return render_template("dashboard.html", name=name, points=points, streak=streak, memories=memories)
 
-@app.route("/explore")
-def explore_gardens():
-    c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
-    user_ids = [r[0] for r in c.fetchall()]
-    gardens = []
-
-    for uid in user_ids:
-        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 3", (uid,))
-        mems = c.fetchall()
-        gardens.append({"user_id": uid, "memories": mems})
-
-    return render_template("explore.html", gardens=gardens)
-
 @app.route("/leaderboard")
 def leaderboard():
     c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
     rows = c.fetchall()
     return render_template("leaderboard.html", users=rows)
 
-@app.route("/" + BOT_TOKEN, methods=['POST'])
+@app.route("/explore")
+def explore_gardens():
+    c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
+    user_ids = [r[0] for r in c.fetchall()]
+
+    gardens = []
+    for uid in user_ids:
+        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 3", (uid,))
+        memories = c.fetchall()
+        gardens.append({"user_id": uid, "memories": memories})
+
+    return render_template("explore.html", gardens=gardens)
+
+@app.route("/" + BOT_TOKEN, methods=["POST"])
 def webhook():
-    try:
-        data = request.get_json(force=True)
-
-        # Validate it's a Telegram update (it must contain 'update_id')
-        if not data or 'update_id' not in data:
-            print("⚠️ Invalid request: No update_id")
-            return "Invalid data", 400
-
-        update = telebot.types.Update.de_json(data)
+    update = telebot.types.Update.de_json(request.get_data(as_text=True))
+    if update:
         bot.process_new_updates([update])
-    except Exception as e:
-        print(f"❌ Webhook error: {e}")
-        return "Error", 500
-
     return "OK", 200
-
-
 
 @app.route("/")
 def index():
     return "🌸 SoulGarden Bot is running."
 
-# --- Start ---
+# --- Launch ---
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
