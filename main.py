@@ -85,6 +85,22 @@ def start(message):
 def help_cmd(message):
     bot.send_message(message.chat.id, "Type /start to begin your SoulGarden journey 🌼\nLog memories daily and explore others anonymously.")
 
+@bot.message_handler(commands=["leaderboard"])
+def leaderboard_cmd(message):
+    c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
+    rows = c.fetchall()
+    if not rows:
+        bot.send_message(message.chat.id, "No users have points yet 🌱")
+        return
+
+    text = "🏆 <b>Top Gardeners</b>\n\n"
+    for i, row in enumerate(rows, 1):
+        text += f"{i}. @{row[0]} — {row[1]} pts\n"
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🌐 View on Website", url=f"{WEBHOOK_URL}/leaderboard"))
+    bot.send_message(message.chat.id, text, parse_mode="HTML", reply_markup=markup)
+
 @bot.message_handler(commands=['explore'])
 def explore_cmd(message):
     memories = get_other_memories(message.from_user.id)
