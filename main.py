@@ -234,13 +234,13 @@ def handle_buttons(call):
     elif call.data == "about":
         about_cmd(call.message)
     elif data == "confirm_delete":
-    user_id = call.from_user.id
-    c.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
-    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    conn.commit()
-    bot.send_message(user_id, "✅ All your data has been deleted. You can start fresh anytime with /start.")
+        user_id = call.from_user.id
+        c.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
+        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        bot.send_message(user_id, "✅ All your data has been deleted. You can start fresh anytime with /start.")
     elif data == "cancel_delete":
-    bot.send_message(call.from_user.id, "❎ Deletion cancelled. Your garden is safe.")
+        bot.send_message(call.from_user.id, "❎ Deletion cancelled. Your garden is safe.")
 
 
 
