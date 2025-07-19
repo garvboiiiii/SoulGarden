@@ -235,10 +235,24 @@ def handle_buttons(call):
         about_cmd(call.message)
     elif call.data == "confirm_delete":
         user_id = call.from_user.id
+        
+        # Delete user's voice files from static/voices
+        c.execute("SELECT voice_path FROM memories WHERE user_id = ?", (user_id,))
+        voice_paths = [row[0] for row in c.fetchall() if row[0]]
+        
+        for path in voice_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception as e:
+                print(f"Failed to delete {path}: {e}")
+                
+        # Delete from database        
         c.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
         c.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
-        bot.send_message(user_id, "✅ All your data has been deleted. You can start fresh anytime with /start.")
+        bot.send_message(user_id, "✅ All your data and voice notes have been deleted. You can start fresh anytime with /start.")
+
     elif call.data == "cancel_delete":
         bot.send_message(call.from_user.id, "❎ Deletion cancelled. Your garden is safe.")
 
