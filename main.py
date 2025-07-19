@@ -47,6 +47,7 @@ bot.set_my_commands([
     BotCommand("leaderboard", "View top users"),
     BotCommand("explore", "Explore other gardens"),
     BotCommand("about", "About SoulGarden"),
+    BotCommand("delete", "Delete all your memories and data"),
     BotCommand("help", "Help with commands")
 ])
 
@@ -57,6 +58,7 @@ def menu_buttons(user_id):
         InlineKeyboardButton("🎤 Voice Note", callback_data="voice"),
         InlineKeyboardButton("📜 My Memories", callback_data="memories"),
         InlineKeyboardButton("🏆 Leaderboard", url=f"{WEBHOOK_URL}/leaderboard"),
+        InlineKeyboardButton("🔐 Privacy", url=f"{WEBHOOK_URL}/privacy"),
         InlineKeyboardButton("🌍 Explore Gardens", callback_data="explore"),
         InlineKeyboardButton("📊 Dashboard", url=f"{WEBHOOK_URL}/dashboard/{user_id}"),
         InlineKeyboardButton("ℹ️ About", callback_data="about")
@@ -156,6 +158,20 @@ def memories_cmd(message):
         text += f"{r[2][:10]} - {r[1]}\n🧠 {r[0]}\n\n"
     bot.send_message(user_id, text, parse_mode="HTML")
 
+
+# --- Delete Memories ---
+@bot.message_handler(commands=['delete'])
+def delete_user_data(message):
+    user_id = message.from_user.id
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("❌ Confirm Deletion", callback_data="confirm_delete"),
+        InlineKeyboardButton("🔙 Cancel", callback_data="cancel_delete")
+    )
+    bot.send_message(user_id, "⚠️ Are you sure you want to delete all your data? This action cannot be undone.", reply_markup=markup)
+
+
+
 # --- Leaderboard ---
 @bot.message_handler(commands=["leaderboard"])
 def leaderboard_cmd(message):
@@ -217,6 +233,21 @@ def handle_buttons(call):
         explore_cmd(call.message)
     elif call.data == "about":
         about_cmd(call.message)
+    elif data == "confirm_delete":
+    user_id = call.from_user.id
+    c.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
+    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    bot.send_message(user_id, "✅ All your data has been deleted. You can start fresh anytime with /start.")
+    elif data == "cancel_delete":
+    bot.send_message(call.from_user.id, "❎ Deletion cancelled. Your garden is safe.")
+
+
+
+
+
+
+
 
 # --- Web Routes ---
 @app.route("/dashboard/<int:user_id>")
@@ -243,6 +274,13 @@ def leaderboard():
     c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
     rows = c.fetchall()
     return render_template("leaderboard.html", users=rows)
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
 
 @app.route("/explore/garden/<int:user_id>")
 def visit_garden(user_id):
