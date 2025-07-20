@@ -3,7 +3,8 @@ import sqlite3
 import telebot
 from flask import Flask, request, render_template
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
-from utils import log_memory, get_user_stats, get_other_memories, calculate_streak
+from utils import log_memory, get_user_stats, calculate_streak
+from datetime import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -14,31 +15,29 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 conn = sqlite3.connect("garden.db", check_same_thread=False)
 c = conn.cursor()
 
-# --- DB Tables ---
-c.execute("""
-CREATE TABLE IF NOT EXISTS users (
+# --- DB Setup ---
+c.execute("""CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     username TEXT UNIQUE,
+    referred_by INTEGER,
     streak INTEGER DEFAULT 0,
     last_entry TEXT,
-    points INTEGER DEFAULT 0
-)
-""")
-c.execute("""
-CREATE TABLE IF NOT EXISTS memories (
+    points INTEGER DEFAULT 0,
+    joined_at TEXT
+)""")
+
+c.execute("""CREATE TABLE IF NOT EXISTS memories (
     user_id INTEGER,
     text TEXT,
     mood TEXT,
     timestamp TEXT,
     voice_path TEXT
-)
-""")
+)""")
 conn.commit()
 
-# --- Temporary Store ---
 user_memory_temp = {}
 
-# --- Commands Menu ---
+# --- Commands ---
 bot.set_my_commands([
     BotCommand("start", "Start your SoulGarden"),
     BotCommand("log", "Log a new memory"),
@@ -47,10 +46,12 @@ bot.set_my_commands([
     BotCommand("leaderboard", "View top users"),
     BotCommand("explore", "Explore other gardens"),
     BotCommand("about", "About SoulGarden"),
-    BotCommand("delete", "Delete all your memories and data"),
-    BotCommand("help", "Help with commands")
+    BotCommand("delete", "Delete all your memories"),
+    BotCommand("help", "Help and commands"),
+    BotCommand("referral", "Share your referral link")
 ])
 
+# --- Menu Buttons ---
 def menu_buttons(user_id):
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -58,35 +59,64 @@ def menu_buttons(user_id):
         InlineKeyboardButton("🎤 Voice Note", callback_data="voice"),
         InlineKeyboardButton("📜 My Memories", callback_data="memories"),
         InlineKeyboardButton("🏆 Leaderboard", url=f"{WEBHOOK_URL}/leaderboard"),
-        InlineKeyboardButton("🔐 Privacy", url=f"{WEBHOOK_URL}/privacy"),
-        InlineKeyboardButton("🌍 Explore Gardens", callback_data="explore"),
+        InlineKeyboardButton("🌍 Explore", callback_data="explore"),
         InlineKeyboardButton("📊 Dashboard", url=f"{WEBHOOK_URL}/dashboard/{user_id}"),
+        InlineKeyboardButton("🔐 Privacy", url=f"{WEBHOOK_URL}/privacy"),
         InlineKeyboardButton("ℹ️ About", callback_data="about")
     )
     return markup
 
-# --- Start ---
+# --- Start Command with Referral ---
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
     username = message.from_user.username or f"user{user_id}"
-    c.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
-    conn.commit()
+    referred_by = None
 
-    bot.send_message(
-        user_id,
-        f"🌸 Welcome to <b>SoulGarden</b>, @{username}!\n"
-        "🪴 This is your peaceful space to grow mentally.\n"
-        "📝 Log memories, 🎧 share voice notes, and 🌍 explore thoughts of others anonymously.\n"
-        "Earn 🌱 by returning daily.\n\nLet’s grow your garden together!",
-        reply_markup=menu_buttons(user_id),
-        parse_mode='HTML'
-    )
+    if len(message.text.split()) > 1:
+        ref = message.text.split()[1]
+        try:
+            referred_by = int(ref) if int(ref) != user_id else None
+        except:
+            pass
+
+    # Check if user is new
+    c.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    existing = c.fetchone()
+
+    if not existing:
+        now = datetime.utcnow().isoformat()
+        c.execute("INSERT INTO users (id, username, referred_by, joined_at) VALUES (?, ?, ?, ?)",
+                  (user_id, username, referred_by, now))
+
+        # Referral reward
+        if referred_by:
+            c.execute("UPDATE users SET points = points + 4 WHERE id = ?", (referred_by,))
+            bot.send_message(referred_by, f"🎁 You earned 4 points for inviting @{username}!")
+
+        conn.commit()
+
+        bot.send_message(user_id,
+            f"🌱 <b>Welcome to SoulGarden</b>, @{username}!\n"
+            "Your mental health sanctuary.\n\n"
+            "✅ Log daily thoughts\n🎤 Share voice notes\n🌍 Explore anonymous gardens\n🏆 Earn points & streaks\n"
+            f"\nStart by logging a memory or use the buttons below.",
+            parse_mode="HTML",
+            reply_markup=menu_buttons(user_id)
+        )
+    else:
+        bot.send_message(user_id, "🌸 Welcome back to SoulGarden!", reply_markup=menu_buttons(user_id))
+
+# --- Referral Link ---
+@bot.message_handler(commands=['referral'])
+def referral_cmd(message):
+    uid = message.from_user.id
+    bot.send_message(uid, f"🔗 Your invite link:\nhttps://t.me/s0ulGarden_Bot?start={uid}")
 
 # --- Help ---
 @bot.message_handler(commands=['help'])
 def help_cmd(message):
-    bot.send_message(message.chat.id, "🌼 Use /log to share a memory, /voice to send a voice note, or /memories to revisit your thoughts.")
+    bot.send_message(message.chat.id, "💡 Use /log to write, /voice to record, or /explore to discover other gardens.")
 
 # --- Log Memory ---
 @bot.message_handler(commands=['log'])
@@ -98,131 +128,112 @@ def handle_memory(message):
     user_id = message.from_user.id
     text = message.text.strip()
     if not text:
-        bot.send_message(user_id, "❗Please type something to log.")
+        bot.send_message(user_id, "❗Please type something.")
         return
 
     user_memory_temp[user_id] = text
     markup = InlineKeyboardMarkup()
-    for mood in ["😊", "😔", "🤯", "💡", "😴"]:
+    for mood in ["😊 Happy", "😔 Sad", "🤯 Stressed", "💡 Inspired", "😴 Tired"]:
         markup.add(InlineKeyboardButton(mood, callback_data=f"mood|{mood}"))
-
-    bot.send_message(user_id, "💬 Choose a mood for this memory:", reply_markup=markup)
+    bot.send_message(user_id, "💬 Pick a mood for this entry:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("mood|"))
 def handle_mood(call):
     user_id = call.from_user.id
     mood = call.data.split("|", 1)[1]
-
     text = user_memory_temp.pop(user_id, None)
+
     if not text:
-        bot.send_message(user_id, "❗Memory expired. Please /log again.")
+        bot.send_message(user_id, "⏳ Timeout! Try /log again.")
         return
 
     log_memory(user_id, text, mood)
     stats = get_user_stats(user_id)
-    bot.send_message(user_id, f"🌱 Memory saved!\n📆 Streak: {stats['streak']} days\n🌟 Points: {stats['points']}")
+   
+    # 🌱 Feedback + Image
+    bot.send_message(
+        user_id,
+        f"🌱 Memory saved!\n\n"
+        f"📆 <b>Streak:</b> {stats['streak']} days\n"
+        f"🌟 <b>Points:</b> {stats['points']}\n\n"
+        "🪴 Your first sprout has grown!\n"
+        "Return daily to grow your SoulGarden 🌸",
+        parse_mode="HTML"
+    )
 
-# --- Voice Memory ---
+    bot.send_photo(user_id, photo=open("static/sprout.jpg", "rb"))
+
+    # Show buttons
+    bot.send_message(
+        user_id,
+        "✨ What would you like to do next?",
+        reply_markup=menu_buttons(user_id)
+    ) 
+
+# --- Voice Note ---
 @bot.message_handler(commands=['voice'])
 def voice_cmd(message):
-    bot.send_message(message.chat.id, "🎤 Send your voice note now...")
+    bot.send_message(message.chat.id, "🎤 Send your voice note now.")
 
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
     user_id = message.from_user.id
-    voice = message.voice
-    file_info = bot.get_file(voice.file_id)
+    file_info = bot.get_file(message.voice.file_id)
     downloaded = bot.download_file(file_info.file_path)
 
     os.makedirs("static/voices", exist_ok=True)
-    filename = f"static/voices/{user_id}_{voice.file_id}.ogg"
-    with open(filename, 'wb') as f:
+    path = f"static/voices/{user_id}_{file_info.file_unique_id}.ogg"
+    with open(path, "wb") as f:
         f.write(downloaded)
 
-    log_memory(user_id, "(voice note)", "🎧", voice_path=filename)
+    log_memory(user_id, "(voice note)", "🎧", voice_path=path)
     stats = get_user_stats(user_id)
-    bot.send_message(user_id, f"🎧 Voice memory saved!\n📆 Streak: {stats['streak']} days\n🌟 Points: {stats['points']}")
+    bot.send_message(user_id, f"🎧 Voice saved!\n📆 {stats['streak']} days • 🌟 {stats['points']} pts")
 
 # --- Memories ---
 @bot.message_handler(commands=['memories'])
 def memories_cmd(message):
-    user_id = message.from_user.id
-    c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (user_id,))
+    uid = message.from_user.id
+    c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (uid,))
     rows = c.fetchall()
     if not rows:
-        bot.send_message(user_id, "📭 No memories logged yet.")
+        bot.send_message(uid, "📭 No memories yet.")
         return
 
-    text = "📜 <b>Your Recent Memories:</b>\n\n"
+    reply = "🧠 <b>Your Memories:</b>\n\n"
     for r in rows:
-        text += f"{r[2][:10]} - {r[1]}\n🧠 {r[0]}\n\n"
-    bot.send_message(user_id, text, parse_mode="HTML")
-
-
-# --- Delete Memories ---
-@bot.message_handler(commands=['delete'])
-def delete_user_data(message):
-    user_id = message.from_user.id
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton("❌ Confirm Deletion", callback_data="confirm_delete"),
-        InlineKeyboardButton("🔙 Cancel", callback_data="cancel_delete")
-    )
-    bot.send_message(user_id, "⚠️ Are you sure you want to delete all your data? This action cannot be undone.", reply_markup=markup)
-
-
-
-# --- Leaderboard ---
-@bot.message_handler(commands=["leaderboard"])
-def leaderboard_cmd(message):
-    c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
-    rows = c.fetchall()
-    if not rows:
-        bot.send_message(message.chat.id, "🌱 No users have points yet.")
-        return
-
-    text = "🏆 <b>Top Gardeners</b>\n\n"
-    for i, row in enumerate(rows, 1):
-        text += f"{i}. @{row[0]} — {row[1]} pts\n"
-
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("🌐 View on Website", url=f"{WEBHOOK_URL}/leaderboard"))
-    bot.send_message(message.chat.id, text, parse_mode="HTML", reply_markup=markup)
+        reply += f"{r[2][:10]} - {r[1]}\n{r[0]}\n\n"
+    bot.send_message(uid, reply, parse_mode="HTML")
 
 # --- Explore ---
-@bot.message_handler(commands=['explore'])
+@bot.message_handler(commands=["explore"])
 def explore_cmd(message):
-    explore_cmd_core(message.chat.id)
-
-def explore_cmd_core(chat_id):
+    uid = message.chat.id
     c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
-    user_ids = [r[0] for r in c.fetchall()]
-    if not user_ids:
-        bot.send_message(chat_id, "🌱 No gardens to explore yet.")
-        return
-
-    for uid in user_ids:
-        c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1", (uid,))
+    ids = [row[0] for row in c.fetchall()]
+    for u in ids:
+        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1", (u,))
         mem = c.fetchone()
         if not mem:
             continue
-        msg = f"🧠 <b>{mem[2][:10]}</b> ({mem[1]})\n{mem[0]}"
+        txt = f"🌿 <b>{mem[2][:10]}</b> — {mem[1]}\n{mem[0]}"
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🌿 Visit Garden", url=f"{WEBHOOK_URL}/explore/garden/{uid}"))
-        bot.send_message(chat_id, msg, parse_mode="HTML", reply_markup=markup)
+        markup.add(InlineKeyboardButton("🔍 Visit Garden", url=f"{WEBHOOK_URL}/explore/garden/{u}"))
+        bot.send_message(uid, txt, parse_mode="HTML", reply_markup=markup)
 
-# --- About ---
-@bot.message_handler(commands=['about'])
-def about_cmd(message):
-    bot.send_message(
-        message.chat.id,
-        "💫 <b>About SoulGarden:</b>\nLog your thoughts, emotions, and voice notes anonymously. Every memory helps your digital garden grow.\n\nEarn 🌱 by returning daily. Peaceful, private, and purposeful 🌼",
-        parse_mode="HTML"
+# --- Delete ---
+@bot.message_handler(commands=["delete"])
+def delete_cmd(message):
+    uid = message.from_user.id
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("❌ Yes, delete", callback_data="confirm_delete"),
+        InlineKeyboardButton("🙅 Cancel", callback_data="cancel_delete")
     )
+    bot.send_message(uid, "⚠️ Are you sure you want to delete all your data?", reply_markup=markup)
 
-# --- Callback Buttons ---
 @bot.callback_query_handler(func=lambda call: True)
-def handle_buttons(call):
+def handle_callbacks(call):
     if call.data == "log":
         log_cmd(call.message)
     elif call.data == "voice":
@@ -233,80 +244,58 @@ def handle_buttons(call):
         explore_cmd(call.message)
     elif call.data == "about":
         about_cmd(call.message)
-    elif call.data == "confirm_delete":
-        user_id = call.from_user.id
-        
-        # Delete user's voice files from static/voices
-        c.execute("SELECT voice_path FROM memories WHERE user_id = ?", (user_id,))
-        voice_paths = [row[0] for row in c.fetchall() if row[0]]
-        
-        for path in voice_paths:
-            try:
-                if os.path.exists(path):
-                    os.remove(path)
-            except Exception as e:
-                print(f"Failed to delete {path}: {e}")
-                
-        # Delete from database        
-        c.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
-        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
-        conn.commit()
-        bot.send_message(user_id, "✅ All your data and voice notes have been deleted. You can start fresh anytime with /start.")
-
     elif call.data == "cancel_delete":
-        bot.send_message(call.from_user.id, "❎ Deletion cancelled. Your garden is safe.")
+        bot.send_message(call.from_user.id, "🔒 Your garden is safe.")
+    elif call.data == "confirm_delete":
+        uid = call.from_user.id
+        c.execute("SELECT voice_path FROM memories WHERE user_id = ?", (uid,))
+        for path in [r[0] for r in c.fetchall() if r[0]]:
+            try:
+                os.remove(path)
+            except:
+                pass
+        c.execute("DELETE FROM memories WHERE user_id = ?", (uid,))
+        c.execute("DELETE FROM users WHERE id = ?", (uid,))
+        conn.commit()
+        bot.send_message(uid, "🗑️ All data deleted. Start again anytime with /start.")
 
+# --- Other ---
+@bot.message_handler(commands=['about'])
+def about_cmd(message):
+    bot.send_message(message.chat.id, "🌸 SoulGarden helps you track thoughts and emotions. Safe, private, and gentle growth.")
 
+@bot.message_handler(commands=["leaderboard"])
+def leaderboard_cmd(message):
+    c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
+    rows = c.fetchall()
+    msg = "🏆 <b>Top Gardeners</b>\n\n" + "\n".join([f"{i+1}. @{r[0]} — {r[1]} pts" for i, r in enumerate(rows)])
+    markup = InlineKeyboardMarkup().add(InlineKeyboardButton("🌐 View Online", url=f"{WEBHOOK_URL}/leaderboard"))
+    bot.send_message(message.chat.id, msg, parse_mode="HTML", reply_markup=markup)
 
-
-
-
-
-
-
-# --- Web Routes ---
+# --- Web App Routes ---
 @app.route("/dashboard/<int:user_id>")
 def dashboard(user_id):
     c.execute("SELECT username, points FROM users WHERE id = ?", (user_id,))
-    user = c.fetchone()
-    if not user:
-        return "User not found", 404
-
-    name, points = user
-    streak = calculate_streak(user_id)
+    u = c.fetchone()
+    if not u: return "User not found", 404
     c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
-    memories = [{
-        "text": row[0],
-        "mood": row[1],
-        "timestamp": row[2],
-        "voice": row[3]
-    } for row in c.fetchall()]
-
-    return render_template("dashboard.html", name=name, points=points, streak=streak, memories=memories)
+    mems = [{"text": r[0], "mood": r[1], "timestamp": r[2], "voice": r[3]} for r in c.fetchall()]
+    return render_template("dashboard.html", name=u[0], points=u[1], streak=calculate_streak(user_id), memories=mems)
 
 @app.route("/leaderboard")
 def leaderboard():
     c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
-    rows = c.fetchall()
-    return render_template("leaderboard.html", users=rows)
-
+    return render_template("leaderboard.html", users=c.fetchall())
 
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
 
-
-
 @app.route("/explore/garden/<int:user_id>")
 def visit_garden(user_id):
     c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
-    memories = [{
-        "text": row[0],
-        "mood": row[1],
-        "timestamp": row[2],
-        "voice": row[3]
-    } for row in c.fetchall()]
-    return render_template("visit_garden.html", memories=memories)
+    mems = [{"text": r[0], "mood": r[1], "timestamp": r[2], "voice": r[3]} for r in c.fetchall()]
+    return render_template("visit_garden.html", memories=mems)
 
 @app.route("/" + BOT_TOKEN, methods=["POST"])
 def webhook():
@@ -317,9 +306,8 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "🌸 SoulGarden Bot is running."
+    return "🌼 SoulGarden Bot is live."
 
-# --- Start App ---
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
