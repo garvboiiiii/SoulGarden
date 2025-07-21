@@ -72,6 +72,7 @@ def menu_buttons(uid):
         InlineKeyboardButton("🏆 Leaderboard", url=f"{WEBHOOK_URL}/leaderboard"),
         InlineKeyboardButton("🌍 Explore", callback_data="explore"),
         InlineKeyboardButton("📊 Dashboard", url=f"{WEBHOOK_URL}/dashboard/{uid}"),
+        InlineKeyboardButton("🌟 Streak", callback_data="streak"),
         InlineKeyboardButton("🔒 Privacy", url=f"{WEBHOOK_URL}/privacy"),
         InlineKeyboardButton("🗑️ Delete Data", callback_data="delete")
     )
@@ -118,6 +119,9 @@ def handle_callback(call):
         return explore_cmd(call.message)
     elif call.data == "about":
         return about_cmd(call.message)
+    elif call.data == "streak":
+    streak = calculate_streak(uid)
+    bot.send_message(uid, f"📆 Your current streak is: {streak} days!", reply_markup=menu_buttons(uid))
     elif call.data == "delete":
         return delete_cmd(call.message)
     elif call.data.startswith("mood|"):
@@ -245,11 +249,13 @@ def admin():
 def privacy():
     return render_template("privacy.html")
 
-
 # Leaderboard
 @app.route("/leaderboard")
 def leaderboard():
-    return render_template("leaderboard.html")
+    c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
+    rows = c.fetchall()
+    return render_template("leaderboard.html", leaderboard=rows)
+
 
 
 
