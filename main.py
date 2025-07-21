@@ -280,7 +280,18 @@ def dashboard(user_id):
     if not u: return "User not found", 404
     c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
     mems = [{"text": r[0], "mood": r[1], "timestamp": r[2], "voice": r[3]} for r in c.fetchall()]
-    return render_template("dashboard.html", name=u[0], points=u[1], streak=calculate_streak(user_id), memories=mems)
+    # Count referrals
+c.execute("SELECT COUNT(*) FROM users WHERE referred_by = ?", (user_id,))
+ref_count = c.fetchone()[0]
+
+return render_template("dashboard.html", 
+    name=u[0],
+    points=u[1],
+    streak=calculate_streak(user_id),
+    memories=mems,
+    referrals=ref_count
+)
+
 
 @app.route("/leaderboard")
 def leaderboard():
