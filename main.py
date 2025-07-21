@@ -248,7 +248,7 @@ def privacy():
 
 # Leaderboard
 @app.route("/leaderboard")
-def privacy():
+def leaderboard():
     return render_template("leaderboard.html")
 
 
