@@ -75,11 +75,12 @@
 <body>
 
   <h1>{{ name }}'s SoulGarden 🌿</h1>
-  <h2>✨ Growing with every thought logged</h2>
+  <h2>✨ Growing with every thought you logged</h2>
 
   <div class="stats">
     <div class="stat">🌱 Points<br><strong>{{ points }}</strong></div>
     <div class="stat">🔥 Streak<br><strong>{{ streak }} days</strong></div>
+    <div class="stat">👥 Referrals:<br><strong>{{ referrals }}</strong></div>
   </div>
 
   {% for mem in memories %}
