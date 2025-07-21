@@ -9,19 +9,6 @@ from datetime import datetime
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-motivation_quotes = [ 
-    "🌟 You're doing better than you think.",
-    "💪 Logging emotions is an act of bravery.",
-    "🧘 Keep growing, one day at a time.",
-    "🌿 Healing begins with self-awareness.",
-    "🌸 You planted a seed of strength today.",
-    "📖 Your story is powerful.",
-    "🎯 Every log is a step to peace.",
-    "🔥 It’s okay to feel. That’s how you grow.",
-    "🛤️ Your journey is uniquely beautiful.",
-    "✨ You matter, and so do your memories."
-]
-
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
@@ -175,6 +162,18 @@ def handle_mood(call):
     )
 
     bot.send_photo(user_id, photo=open("static/sprout.jpg", "rb"))
+    motivation_quotes = [ 
+    "🌟 You're doing better than you think.",
+    "💪 Logging emotions is an act of bravery.",
+    "🧘 Keep growing, one day at a time.",
+    "🌿 Healing begins with self-awareness.",
+    "🌸 You planted a seed of strength today.",
+    "📖 Your story is powerful.",
+    "🎯 Every log is a step to peace.",
+    "🔥 It’s okay to feel. That’s how you grow.",
+    "🛤️ Your journey is uniquely beautiful.",
+    "✨ You matter, and so do your memories."
+    ]
     bot.send_message(user_id, random.choice(motivation_quotes))
 
     # Show buttons
@@ -203,6 +202,18 @@ def handle_voice(message):
     log_memory(user_id, "(voice note)", "🎧", voice_path=path)
     stats = get_user_stats(user_id)
     bot.send_message(user_id, f"🎧 Voice saved!\n📆 {stats['streak']} days • 🌟 {stats['points']} pts")
+    motivation_quotes = [ 
+    "🌟 You're doing better than you think.",
+    "💪 Logging emotions is an act of bravery.",
+    "🧘 Keep growing, one day at a time.",
+    "🌿 Healing begins with self-awareness.",
+    "🌸 You planted a seed of strength today.",
+    "📖 Your story is powerful.",
+    "🎯 Every log is a step to peace.",
+    "🔥 It’s okay to feel. That’s how you grow.",
+    "🛤️ Your journey is uniquely beautiful.",
+    "✨ You matter, and so do your memories."
+    ]
     bot.send_message(user_id, random.choice(motivation_quotes))
 
 # --- Memories ---
