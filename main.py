@@ -99,7 +99,6 @@ def start(message):
             "Your mental health sanctuary.\n\n"
             "✅ Log daily thoughts\n🎤 Share voice notes\n🌍 Explore anonymous gardens\n🏆 Earn points & streaks\n",
             parse_mode="HTML")
-        bot.send_photo(uid, photo=open("static/sprout.jpg", "rb"))
     else:
         c.execute("UPDATE users SET is_new = 0 WHERE id = ?", (uid,))
     conn.commit()
