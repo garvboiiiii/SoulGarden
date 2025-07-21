@@ -293,6 +293,39 @@ def dashboard(user_id):
     )
 
 
+
+
+
+# --- Admin Analytics ---
+@app.route("/admin/analytics")
+def admin_analytics():
+    admin_id = 1335511330  # Replace with YOUR Telegram ID
+
+    uid = request.args.get("uid")
+    if not uid or int(uid) != admin_id:
+        return "Unauthorized", 403
+
+    today = datetime.utcnow().date().isoformat()
+
+    c.execute("SELECT COUNT(*) FROM users")
+    total_users = c.fetchone()[0]
+
+    c.execute("SELECT COUNT(*) FROM users WHERE joined_at LIKE ?", (f"{today}%",))
+    new_today = c.fetchone()[0]
+
+    c.execute("SELECT COUNT(*) FROM memories")
+    total_memories = c.fetchone()[0]
+
+    c.execute("SELECT COUNT(*) FROM memories WHERE timestamp LIKE ?", (f"{today}%",))
+    new_memories = c.fetchone()[0]
+
+    return render_template("admin_analytics.html", **{
+        "total_users": total_users,
+        "new_today": new_today,
+        "total_memories": total_memories,
+        "new_memories": new_memories
+    })
+    
 @app.route("/leaderboard")
 def leaderboard():
     c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
