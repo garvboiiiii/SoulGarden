@@ -215,7 +215,7 @@ def explore_cmd(message):
         mem = c.fetchone()
         if not mem: continue
         txt = f"🌿 <b>{mem[2][:10]}</b> — {mem[1]}\n{mem[0]}"
-        markup = InlineKeyboardMarkup().add(InlineKeyboardButton("🔍 Visit Garden", url=f"{WEBHOOK_URL}/visit_garden/{u}"))
+        markup = InlineKeyboardMarkup().add(InlineKeyboardButton("🔍 Visit Garden", url=f"{WEBHOOK_URL}/visit_garden/{uid}"))
         bot.send_message(uid, txt, parse_mode="HTML", reply_markup=markup)
 
 def delete_cmd(message):
