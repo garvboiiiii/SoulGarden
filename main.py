@@ -230,8 +230,8 @@ def dashboard(user_id):
     if not u: return "User not found", 404
     c.execute("SELECT COUNT(*) FROM users WHERE referred_by = ?", (user_id,))
     ref_count = c.fetchone()[0]
-    c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = ?", (user_id,))
-    mems = [{"text": r[0], "mood": r[1], "timestamp": r[2]} for r in c.fetchall()]
+    c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ?", (user_id,))
+    mems = [{"text": r[0], "mood": r[1], "timestamp": r[2], "voice_path": r[3]} for r in c.fetchall()]
     return render_template("dashboard.html", name=u[0], points=u[1], streak=calculate_streak(user_id), memories=mems, referrals=ref_count)
 
 @app.route("/admin/analytics")
@@ -255,18 +255,6 @@ def leaderboard():
     c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
     rows = c.fetchall()
     return render_template("leaderboard.html", leaderboard=rows)
-
-
-@app.route("/dashboard/<int:user_id>")
-def dashboard(user_id):
-    c.execute("SELECT username, points FROM users WHERE id = ?", (user_id,))
-    u = c.fetchone()
-    if not u: return "User not found", 404
-    c.execute("SELECT COUNT(*) FROM users WHERE referred_by = ?", (user_id,))
-    ref_count = c.fetchone()[0]
-    c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ?", (user_id,))
-    mems = [{"text": r[0], "mood": r[1], "timestamp": r[2], "voice_path": r[3]} for r in c.fetchall()]
-    return render_template("dashboard.html", name=u[0], points=u[1], streak=calculate_streak(user_id), memories=mems, referrals=ref_count)
 
 
 @app.route("/")
