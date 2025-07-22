@@ -1,7 +1,7 @@
 import os, random, telebot
 import psycopg2
 import urllib.parse as up
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template, abort
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -76,7 +76,7 @@ def valid_streak(uid):
     row = c.fetchone()
     if not row or not row[0]:
         return True
-    return datetime.utcnow() - row[0] >= timedelta(hours=24)
+    return datetime.now(timezone.utc) - row[0] >= timedelta(hours=24)
 
 def motivation():
     return random.choice([
@@ -147,7 +147,7 @@ def ref_cmd(msg):
 def streak_cmd(msg):
     uid = msg.from_user.id
     if valid_streak(uid):
-        c.execute("UPDATE users SET streak=streak+1, last_streak=?, points=points+1 WHERE id=?",
+        c.execute("UPDATE users SET streak=streak+1, last_streak=?, points=points+1 WHERE id=%s",
                   (datetime.now(timezone.utc).isoformat(), uid))
         conn.commit()
         s = get_stats(uid)
@@ -198,7 +198,7 @@ def on_callback(c_):
         bot.send_message(uid, f"📊 Dashboard:\n{WEBHOOK_URL}/dashboard/{uid}")
     elif data == "streak":
         if valid_streak(uid):
-            c.execute("UPDATE users SET streak=streak+1, last_streak=?, points=points+1 WHERE id=?",
+            c.execute("UPDATE users SET streak=streak+1, last_streak=%s, points=points+1 WHERE id=%s",
                       (datetime.utcnow().isoformat(), uid))
             conn.commit()
             s = get_stats(uid)
@@ -227,7 +227,7 @@ def on_callback(c_):
 
 
 def show_memories(uid):
-    c.execute("SELECT text,mood,timestamp FROM memories WHERE user_id=? ORDER BY timestamp DESC LIMIT 5", (uid,))
+    c.execute("SELECT text,mood,timestamp FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 5", (uid,))
     rows = c.fetchall()
     if not rows:
         bot.send_message(uid, "📭 No memories yet.", reply_markup=menu(uid))
@@ -243,13 +243,13 @@ def send_leaderboard(uid):
                          InlineKeyboardButton("🌐 View Site", url=f"{WEBHOOK_URL}/leaderboard")))
 
 def send_explore(uid):
-    c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != ? ORDER BY RANDOM() LIMIT 5", (uid,))
+    c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != %s ORDER BY RANDOM() LIMIT 5", (uid,))
     others = c.fetchall()
     if not others:
         bot.send_message(uid, "🌱 No new gardens to explore yet. Come back later!", reply_markup=menu(uid))
         return
     for (other_uid,) in others:
-        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id=? ORDER BY timestamp DESC LIMIT 1", (other_uid,))
+        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 1", (other_uid,))
         row = c.fetchone()
         if row:
             t, m, ts = row
@@ -260,11 +260,11 @@ def send_explore(uid):
             )
 
 def delete_all(uid):
-    c.execute("SELECT voice_path FROM memories WHERE user_id=?", (uid,))
+    c.execute("SELECT voice_path FROM memories WHERE user_id=%s", (uid,))
     for (p,) in c.fetchall():
         if p and os.path.exists(p): os.remove(p)
-    c.execute("DELETE FROM memories WHERE user_id=?", (uid,))
-    c.execute("DELETE FROM users WHERE id=?", (uid,))
+    c.execute("DELETE FROM memories WHERE user_id=%s", (uid,))
+    c.execute("DELETE FROM users WHERE id=%s", (uid,))
     conn.commit()
     bot.send_message(uid, "🗑️ Deleted. Send /start to restart.")
 
