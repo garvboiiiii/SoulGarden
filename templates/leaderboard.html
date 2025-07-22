@@ -26,21 +26,21 @@
             border-radius: 12px;
             padding: 15px 25px;
             margin: 10px auto;
-            width: 300px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            width: 320px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.06);
             font-size: 1.1rem;
         }
-        li span {
+        span {
             font-weight: bold;
             color: #2f855a;
         }
     </style>
 </head>
 <body>
-    <h1>🏆 Gardeners with the Most Points 🌱</h1>
+    <h1>🏆 Top Gardeners of SoulGarden</h1>
     <ul>
-        {% for user in lb %}
-        <li> <span>@{{ user[0] }}</span> — {{ user[1] }} pts </li>
+        {% for user in users %}
+            <li><span>@{{ user[0] or 'anon' }}</span> — {{ user[1] }} pts</li>
         {% endfor %}
     </ul>
 </body>
