@@ -86,52 +86,72 @@ def start(msg):
         conn.commit()
     bot.send_message(uid, "🌱 Welcome to SoulGarden!", reply_markup=menu(uid))
 
-def create_fake_callback(msg, data_value):
-    fake_cb = CallbackQuery(
-        id=str(msg.message_id),
-        from_user=msg.from_user,
-        chat_instance=str(msg.chat.id),
-        message=None,
-        inline_message_id=None,
-        data=data_value
-    )
-    on_callback(fake_cb)
 
 @bot.message_handler(commands=['log'])
-def log_cmd(msg): create_fake_callback(msg, "log")
+def log_cmd(msg):
+    uid = msg.from_user.id
+    bot.send_message(uid, "📝 What's on your mind?")
+    bot.register_next_step_handler_by_chat_id(uid, after_log)
 
 @bot.message_handler(commands=['voice'])
-def voice_cmd(msg): create_fake_callback(msg, "voice")
+def voice_cmd(msg):
+    uid = msg.from_user.id
+    pending_voice[uid] = True
+    bot.send_message(uid, "🎤 Send your voice note.")
 
 @bot.message_handler(commands=['memories'])
-def mem_cmd(msg): create_fake_callback(msg, "memories")
+def mem_cmd(msg): show_memories(msg.from_user.id)
 
 @bot.message_handler(commands=['leaderboard'])
-def lead_cmd(msg): create_fake_callback(msg, "leaderboard")
+def lead_cmd(msg): send_leaderboard(msg.from_user.id)
 
 @bot.message_handler(commands=['explore'])
-def explore_cmd(msg): create_fake_callback(msg, "explore")
+def explore_cmd(msg): send_explore(msg.from_user.id)
 
 @bot.message_handler(commands=['dashboard'])
-def dash_cmd(msg): create_fake_callback(msg, "dashboard")
+def dash_cmd(msg):
+    uid = msg.from_user.id
+    bot.send_message(uid, f"📊 Dashboard:\n{WEBHOOK_URL}/dashboard/{uid}")
 
 @bot.message_handler(commands=['referral'])
-def ref_cmd(msg): create_fake_callback(msg, "referral")
+def ref_cmd(msg):
+    uid = msg.from_user.id
+    bot.send_message(uid, f"🔗 Share:\nhttps://t.me/{bot.get_me().username}?start={uid}")
 
 @bot.message_handler(commands=['streak'])
-def streak_cmd(msg): create_fake_callback(msg, "streak")
-
-@bot.message_handler(commands=['delete'])
-def delete_cmd(msg): create_fake_callback(msg, "delete")
-
-@bot.message_handler(commands=['privacy'])
-def privacy_cmd(msg): create_fake_callback(msg, "privacy")
+def streak_cmd(msg):
+    uid = msg.from_user.id
+    if valid_streak(uid):
+        c.execute("UPDATE users SET streak=streak+1, last_streak=?, points=points+1 WHERE id=?",
+                  (datetime.utcnow().isoformat(), uid))
+        conn.commit()
+        s = get_stats(uid)
+        bot.send_message(uid, f"✅ +1 Streak! Total: {s['streak']}", reply_markup=menu(uid))
+    else:
+        bot.send_message(uid, "⏳ Come back after 24hrs.", reply_markup=menu(uid))
 
 @bot.message_handler(commands=['help'])
-def help_cmd(msg): create_fake_callback(msg, "help")
+def help_cmd(msg):
+    uid = msg.from_user.id
+    bot.send_message(uid, "ℹ️ Log memories, voice notes, earn streaks, grow mindful daily.")
 
 @bot.message_handler(commands=['about'])
-def about_cmd(msg): create_fake_callback(msg, "about")
+def about_cmd(msg):
+    uid = msg.from_user.id
+    bot.send_message(uid, "🧘 SoulGarden is your emotional space to grow.")
+
+@bot.message_handler(commands=['privacy'])
+def privacy_cmd(msg):
+    uid = msg.from_user.id
+    bot.send_message(uid, f"🔒 Privacy:\n{WEBHOOK_URL}/privacy")
+
+@bot.message_handler(commands=['delete'])
+def delete_cmd(msg):
+    uid = msg.from_user.id
+    kb = InlineKeyboardMarkup().row(
+        InlineKeyboardButton("❌ Yes", callback_data="confirm"),
+        InlineKeyboardButton("🙅 Cancel", callback_data="cancel"))
+    bot.send_message(uid, "⚠️ Confirm delete?", reply_markup=kb)
 
 # Callback
 @bot.callback_query_handler(func=lambda c_: True)
