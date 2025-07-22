@@ -46,12 +46,12 @@
 
   {% for mem in memories %}
   <div class="memory">
-    <p class="timestamp">{{ mem.timestamp[:10] }} — <span class="mood">{{ mem.mood }}</span></p>
-    <p>{{ mem.text }}</p>
-    {% if mem.voice %}
+    <p class="timestamp">{{ mem["timestamp"][:10] }} — <span class="mood">{{ mem["mood"] }}</span></p>
+    <p>{{ mem["text"] }}</p>
+    {% if mem["voice"] %}
       <div class="voice">
         <audio controls>
-          <source src="/{{ mem.voice }}" type="audio/ogg">
+          <source src="/{{ mem['voice'] }}" type="audio/ogg">
           Your browser does not support the audio element.
         </audio>
       </div>
