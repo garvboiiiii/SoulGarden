@@ -85,13 +85,13 @@
 
   {% for mem in memories %}
   <div class="memory">
-    <h3>{{ mem.timestamp[:10] }} — {{ mem.mood }}</h3>
-    <p>{{ mem.text }}</p>
-    {% if mem.voice %}
+    <h3>{{ mem["timestamp"][:10] }} — {{ mem["mood"] }}</h3>
+    <p>{{ mem["text"] }}</p>
+    {% if mem["voice"] %}
     <div class="voice-note">
       <strong>🎧 Voice Memory:</strong><br>
       <audio controls>
-        <source src="/{{ mem.voice }}" type="audio/ogg">
+        <source src="/{{ mem['voice'] }}" type="audio/ogg">
         Your browser does not support the audio tag.
       </audio>
     </div>
