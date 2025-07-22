@@ -1,7 +1,7 @@
 import os, sqlite3, random, telebot
 from datetime import datetime, timedelta
 from flask import Flask, request, render_template
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, User, CallbackQuery
 from apscheduler.schedulers.background import BackgroundScheduler
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -86,23 +86,52 @@ def start(msg):
         conn.commit()
     bot.send_message(uid, "🌱 Welcome to SoulGarden!", reply_markup=menu(uid))
 
+def create_fake_callback(msg, data_value):
+    fake_cb = CallbackQuery(
+        id=str(msg.message_id),
+        from_user=msg.from_user,
+        chat_instance=str(msg.chat.id),
+        message=None,
+        inline_message_id=None,
+        data=data_value
+    )
+    on_callback(fake_cb)
+
 @bot.message_handler(commands=['log'])
-def log_cmd(msg): on_callback(telebot.types.CallbackQuery(from_user=msg.from_user, data="log"))
+def log_cmd(msg): create_fake_callback(msg, "log")
 
 @bot.message_handler(commands=['voice'])
-def voice_cmd(msg): on_callback(telebot.types.CallbackQuery(from_user=msg.from_user, data="voice"))
+def voice_cmd(msg): create_fake_callback(msg, "voice")
 
 @bot.message_handler(commands=['memories'])
-def mem_cmd(msg): on_callback(telebot.types.CallbackQuery(from_user=msg.from_user, data="memories"))
+def mem_cmd(msg): create_fake_callback(msg, "memories")
 
 @bot.message_handler(commands=['leaderboard'])
-def lead_cmd(msg): on_callback(telebot.types.CallbackQuery(from_user=msg.from_user, data="leaderboard"))
+def lead_cmd(msg): create_fake_callback(msg, "leaderboard")
 
 @bot.message_handler(commands=['explore'])
-def explore_cmd(msg): on_callback(telebot.types.CallbackQuery(from_user=msg.from_user, data="explore"))
+def explore_cmd(msg): create_fake_callback(msg, "explore")
 
 @bot.message_handler(commands=['dashboard'])
-def dash_cmd(msg): on_callback(telebot.types.CallbackQuery(from_user=msg.from_user, data="dashboard"))
+def dash_cmd(msg): create_fake_callback(msg, "dashboard")
+
+@bot.message_handler(commands=['referral'])
+def ref_cmd(msg): create_fake_callback(msg, "referral")
+
+@bot.message_handler(commands=['streak'])
+def streak_cmd(msg): create_fake_callback(msg, "streak")
+
+@bot.message_handler(commands=['delete'])
+def delete_cmd(msg): create_fake_callback(msg, "delete")
+
+@bot.message_handler(commands=['privacy'])
+def privacy_cmd(msg): create_fake_callback(msg, "privacy")
+
+@bot.message_handler(commands=['help'])
+def help_cmd(msg): create_fake_callback(msg, "help")
+
+@bot.message_handler(commands=['about'])
+def about_cmd(msg): create_fake_callback(msg, "about")
 
 # Callback
 @bot.callback_query_handler(func=lambda c_: True)
@@ -193,13 +222,21 @@ def send_leaderboard(uid):
                          InlineKeyboardButton("🌐 View Site", url=f"{WEBHOOK_URL}/leaderboard")))
 
 def send_explore(uid):
-    c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id!=? ORDER BY RANDOM() LIMIT 3", (uid,))
-    for (uid2,) in c.fetchall():
-        c.execute("SELECT text, timestamp FROM memories WHERE user_id=? ORDER BY timestamp DESC LIMIT 1", (uid2,))
+    c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != ? ORDER BY RANDOM() LIMIT 5", (uid,))
+    others = c.fetchall()
+    if not others:
+        bot.send_message(uid, "🌱 No new gardens to explore yet. Come back later!", reply_markup=menu(uid))
+        return
+    for (other_uid,) in others:
+        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id=? ORDER BY timestamp DESC LIMIT 1", (other_uid,))
         row = c.fetchone()
         if row:
-            bot.send_message(uid, f"🌿 {row[1][:10]}\n{row[0]}", reply_markup=InlineKeyboardMarkup().row(
-                InlineKeyboardButton("Visit Garden", url=f"{WEBHOOK_URL}/visit_garden/{uid2}")))
+            t, m, ts = row
+            bot.send_message(uid, f"🌿 {ts[:10]} • {m}\n{t}",
+                reply_markup=InlineKeyboardMarkup().row(
+                    InlineKeyboardButton("🌸 Visit Garden", url=f"{WEBHOOK_URL}/visit_garden/{other_uid}")
+                )
+            )
 
 def delete_all(uid):
     c.execute("SELECT voice_path FROM memories WHERE user_id=?", (uid,))
