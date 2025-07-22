@@ -1,8 +1,8 @@
 import os, random, telebot
 import psycopg2
 import urllib.parse as up
-from datetime import datetime, timedelta
-from flask import Flask, request, render_template
+from datetime import datetime, timezone
+from flask import Flask, request, render_template, abort
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -103,7 +103,7 @@ def start(msg):
             INSERT INTO users (id, username, referred_by, joined_at)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (id) DO NOTHING
-        """, (uid, name, ref, datetime.utcnow()))
+        """, (uid, name, ref, datetime.now(timezone.utc)))
         if ref:
             c.execute("UPDATE users SET points = points + 5 WHERE id = %s", (ref,))
             bot.send_message(ref, f"🎁 +5 points for inviting @{name}")
@@ -148,7 +148,7 @@ def streak_cmd(msg):
     uid = msg.from_user.id
     if valid_streak(uid):
         c.execute("UPDATE users SET streak=streak+1, last_streak=?, points=points+1 WHERE id=?",
-                  (datetime.utcnow().isoformat(), uid))
+                  (datetime.now(timezone.utc).isoformat(), uid))
         conn.commit()
         s = get_stats(uid)
         bot.send_message(uid, f"✅ +1 Streak! Total: {s['streak']}", reply_markup=menu(uid))
@@ -329,8 +329,13 @@ def privacy(): return render_template("privacy.html")
 
 @app.route("/admin/analytics")
 def analytics():
-    if int(request.args.get("uid", 0)) != ADMIN_ID:
+    try:
+        uid = int(request.args.get("uid", 0))
+        if uid != ADMIN_ID:
+            return "403", 403
+    except:
         return "403", 403
+
 
     c.execute("SELECT COUNT(*) FROM users")
     total_users = c.fetchone()[0]
@@ -368,8 +373,17 @@ scheduler.add_job(daily, 'cron', hour=8)
 # --- Flask Webhooks ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    bot.process_new_updates([telebot.types.Update.de_json(request.data.decode("utf-8"))])
-    return "OK"
+    try:
+        data = request.get_json(force=True)
+        if "update_id" not in data:
+            return "Ignored: No update_id", 200  # Avoid 500 error on test payloads
+        update = telebot.types.Update.de_json(request.data.decode("utf-8"))
+        bot.process_new_updates([update])
+        return "OK"
+    except Exception as e:
+        print("Webhook error:", e)
+        return abort(500)
+
 
 @app.route("/")
 def home():
