@@ -147,7 +147,7 @@ def ref_cmd(msg):
 def streak_cmd(msg):
     uid = msg.from_user.id
     if valid_streak(uid):
-        c.execute("UPDATE users SET streak=streak+1, last_streak=?, points=points+1 WHERE id=%s",
+        c.execute("UPDATE users SET streak=streak+1, last_streak=%s, points=points+1 WHERE id=%s",
                   (datetime.now(timezone.utc).isoformat(), uid))
         conn.commit()
         s = get_stats(uid)
