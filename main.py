@@ -59,6 +59,8 @@ def menu():
         ("📖 Help", "help"), ("🔒 Privacy", "privacy"),
         ("🧘 About", "about"), ("🗑️ Delete", "delete")
     ]
+    if ADMIN_ID:  # Add admin button only for you
+        buttons.append(("📊 Admin Analytics", "admin"))
     m.add(*[InlineKeyboardButton(t, callback_data=cb) for t, cb in buttons])
     return m
 
@@ -124,6 +126,13 @@ def on_callback(c_):
     elif data == "cancel":
         bot.send_message(uid, "❎ Cancelled.", reply_markup=menu())
 
+    elif data == "admin":
+        if uid == ADMIN_ID:
+            bot.send_message(uid, f"📊 Admin Analytics:\n{WEBHOOK_URL}/admin/analytics?uid={uid}")
+        else:
+            bot.send_message(uid, "🚫 You are not authorized.")
+
+
 def after_mem(msg):
     uid = msg.from_user.id
     user_mem[uid] = msg.text
@@ -132,7 +141,6 @@ def after_mem(msg):
     kb.add(*[InlineKeyboardButton(m, callback_data="mood|" + m) for m in moods])
     bot.send_message(uid, "Choose mood:", reply_markup=kb)
 
-@bot.callback_query_handler(func=lambda c_: c_.data.startswith("mood|"))
 def set_mood(c_):
     uid = c_.from_user.id
     mood = c_.data.split("|")[1]
@@ -143,7 +151,7 @@ def set_mood(c_):
     conn.commit()
     s = get_stats(uid)
     bot.send_message(uid, f"🌿 Logged! Streak: {s['streak']} | Points: {s['points']}\n\n<b>{motivation()}</b>",
-                     parse_mode="HTML", reply_markup=menu())
+                     parse_mode="HTML", reply_markup=menu(uid))
 
 @bot.message_handler(content_types=['voice'])
 def handle_voice(msg):
@@ -214,6 +222,25 @@ def dashboard(uid):
         return render_template("dashboard.html", name=u[0], points=u[1], streak=u[2], referrals=rc, memories=mems)
     except Exception as e:
         return f"Error: {e}", 500
+
+
+@app.route("/admin/analytics")
+def analytics():
+    uid = int(request.args.get("uid", 0))
+    if uid != ADMIN_ID:
+        return "🚫 Forbidden", 403
+
+    c.execute("SELECT COUNT(*) FROM users"); total_users = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM memories"); total_mems = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM memories WHERE voice_path IS NOT NULL"); total_voice = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM users WHERE referred_by IS NOT NULL"); total_ref = c.fetchone()[0]
+
+    return render_template("admin_analytics.html",
+                           users=total_users, memories=total_mems,
+                           voice=total_voice, referrals=total_ref)
+
+
+
 
 @app.route("/leaderboard")
 def leaderboard():
