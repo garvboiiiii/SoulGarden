@@ -28,11 +28,10 @@ c.execute("""CREATE TABLE IF NOT EXISTS memories (
 )""")
 conn.commit()
 
-# Utils
 def get_stats(uid):
     c.execute("SELECT streak, points FROM users WHERE id=?", (uid,))
-    row = c.fetchone() or (0, 0)
-    return {"streak": row[0], "points": row[1]}
+    r = c.fetchone() or (0, 0)
+    return {"streak": r[0], "points": r[1]}
 
 def valid_streak(uid):
     c.execute("SELECT last_streak FROM users WHERE id=?", (uid,))
@@ -50,7 +49,6 @@ def motivation():
         "🌙 Let go, let grow.", "🌼 Healing is nonlinear."
     ])
 
-# UI Menu
 def menu(uid):
     m = InlineKeyboardMarkup(row_width=2)
     buttons = [
@@ -67,10 +65,10 @@ def menu(uid):
 user_mem = {}
 pending_voice = {}
 
-# /start only
 @bot.message_handler(commands=['start'])
 def start(msg):
-    uid, username = msg.from_user.id, msg.from_user.username or f"user{msg.from_user.id}"
+    uid = msg.from_user.id
+    username = msg.from_user.username or f"user{uid}"
     ref = None
     if len(msg.text.split()) > 1:
         try: ref = int(msg.text.split()[1])
@@ -84,7 +82,6 @@ def start(msg):
         conn.commit()
     bot.send_message(uid, "🌱 Welcome to SoulGarden!", reply_markup=menu(uid))
 
-# Callback Handler
 @bot.callback_query_handler(func=lambda c_: True)
 def on_callback(c_):
     uid, data = c_.from_user.id, c_.data
@@ -101,7 +98,7 @@ def on_callback(c_):
     elif data == "explore":
         send_explore(uid)
     elif data == "dashboard":
-        bot.send_message(uid, f"📊 Dashboard:\n{WEBHOOK_URL}/dashboard/{uid}")
+        bot.send_message(uid, f"📊 Dashboard: {WEBHOOK_URL}/dashboard/{uid}")
     elif data == "streak":
         if valid_streak(uid):
             c.execute("UPDATE users SET streak=streak+1, last_streak=?, points=points+1 WHERE id=?",
@@ -114,11 +111,11 @@ def on_callback(c_):
     elif data == "referral":
         bot.send_message(uid, f"🔗 Share link:\nhttps://t.me/{bot.get_me().username}?start={uid}")
     elif data == "help":
-        bot.send_message(uid, "ℹ️ Use this bot to log emotions & voice notes.\nEarn streaks, refer friends, explore minds.\nStart journaling with one tap!")
+        bot.send_message(uid, "ℹ️ Log emotions or voice. Earn points, grow your streak.\nInvite friends. Explore anonymously.")
     elif data == "about":
-        bot.send_message(uid, "🧘 SoulGarden is your emotional garden.\n🌿 Plant daily memories. 🌟 Grow awareness.\n🎤 Reflect with voice, share anonymously.")
+        bot.send_message(uid, "🧘 SoulGarden is your mental garden.\n🌿 Log, grow, reflect daily.")
     elif data == "privacy":
-        bot.send_message(uid, f"🔒 Read privacy policy:\n{WEBHOOK_URL}/privacy")
+        bot.send_message(uid, f"🔒 Read our policy: {WEBHOOK_URL}/privacy")
     elif data == "delete":
         kb = InlineKeyboardMarkup().row(
             InlineKeyboardButton("❌ Yes", callback_data="confirm"),
@@ -127,9 +124,8 @@ def on_callback(c_):
     elif data == "confirm":
         delete_all(uid)
     elif data == "cancel":
-        bot.send_message(uid, "✅ Your garden is safe.", reply_markup=menu(uid))
+        bot.send_message(uid, "✅ Cancelled.", reply_markup=menu(uid))
 
-# Log after mood
 def after_mem(msg):
     uid = msg.from_user.id
     user_mem[uid] = msg.text
@@ -151,7 +147,6 @@ def set_mood(c_):
     bot.send_message(uid, f"🌿 Logged!\nStreak: {s['streak']} | Points: {s['points']}\n\n<b>{motivation()}</b>",
                      parse_mode="HTML", reply_markup=menu(uid))
 
-# Voice handler
 @bot.message_handler(content_types=['voice'])
 def handle_voice(msg):
     uid = msg.from_user.id
@@ -160,7 +155,7 @@ def handle_voice(msg):
         data = bot.download_file(f.file_path)
         os.makedirs("static/voices", exist_ok=True)
         path = f"static/voices/{uid}_{msg.message_id}.ogg"
-        with open(path, "wb") as f_: f_.write(data)
+        open(path, "wb").write(data)
         c.execute("INSERT INTO memories VALUES (?,?,?,?,?)",
                   (uid, "(voice)", "🎧", datetime.utcnow().isoformat(), path))
         c.execute("UPDATE users SET points=points+1 WHERE id=?", (uid,))
@@ -168,7 +163,6 @@ def handle_voice(msg):
         s = get_stats(uid)
         bot.send_message(uid, f"🎧 Saved!\nPoints: {s['points']}\n<b>{motivation()}</b>", parse_mode="HTML", reply_markup=menu(uid))
 
-# Features
 def show_memories(uid):
     c.execute("SELECT text,mood,timestamp FROM memories WHERE user_id=? ORDER BY timestamp DESC LIMIT 5", (uid,))
     rows = c.fetchall()
@@ -187,8 +181,9 @@ def send_leaderboard(uid):
         bot.send_message(uid, "No leaderboard data yet.")
         return
     msg = "\n".join([f"{i+1}. @{u or 'anon'} — {p} pts" for i, (u, p) in enumerate(rows)])
-    bot.send_message(uid, f"🏆 Top Gardeners:\n{msg}", reply_markup=InlineKeyboardMarkup().row(
-        InlineKeyboardButton("🌐 Web View", url=f"{WEBHOOK_URL}/leaderboard")))
+    bot.send_message(uid, f"🏆 Top Gardeners:\n{msg}",
+                     reply_markup=InlineKeyboardMarkup().row(
+                         InlineKeyboardButton("🌐 Web View", url=f"{WEBHOOK_URL}/leaderboard")))
 
 def send_explore(uid):
     c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != ? ORDER BY RANDOM() LIMIT 5", (uid,))
@@ -221,7 +216,7 @@ def dashboard(uid):
     mems = []
     for t, m, ts, vp in c.fetchall():
         mems.append({
-            "text": t or "", "mood": m or "🌿", "time": ts or "unknown",
+            "text": t, "mood": m, "time": ts,
             "voice": vp if vp and os.path.exists(vp) else None
         })
     return render_template("dashboard.html", name=u[0], points=u[1], streak=u[2], referrals=referrals, memories=mems)
@@ -237,12 +232,8 @@ def visit(uid):
     u = c.fetchone()
     if not u: return "User not found", 404
     c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id=? ORDER BY timestamp DESC LIMIT 10", (uid,))
-    mems = []
-    for t, m, ts, vp in c.fetchall():
-        mems.append({
-            "text": t or "", "mood": m or "🪴", "time": ts or "unknown",
-            "voice": vp if vp and os.path.exists(vp) else None
-        })
+    mems = [{"text": t, "mood": m, "time": ts, "voice": vp if vp and os.path.exists(vp) else None}
+            for t, m, ts, vp in c.fetchall()]
     return render_template("visit_garden.html", name=u[0], memories=mems)
 
 @app.route("/privacy")
@@ -251,8 +242,10 @@ def privacy(): return render_template("privacy.html")
 @app.route("/admin/analytics")
 def analytics():
     if int(request.args.get("uid", 0)) != ADMIN_ID: return "403", 403
-    c.execute("SELECT COUNT(*) FROM users"); users = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM memories"); memories = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM users")
+    users = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM memories")
+    memories = c.fetchone()[0]
     return render_template("admin_analytics.html", users=users, memories=memories)
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
