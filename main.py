@@ -238,16 +238,20 @@ def hook():
 @app.route("/")
 def home(): return "🌱 SoulGarden Running"
 
-@scheduler.add_job('cron', hour=8)
 def daily():
     for (uid,) in c.execute("SELECT id FROM users"):
-        bot.send_message(uid, random.choice([
-            "🧘 Reflect a little today?",
-            "🌿 How are you feeling?",
-            "💬 Log your thoughts!",
-            "✨ A small step toward clarity.",
-            "🍃 Breathe, write, grow."
-        ]))
+        try:
+            bot.send_message(uid, random.choice([
+                "🧘 Reflect a little today?",
+                "🌿 How are you feeling?",
+                "💬 Log your thoughts!",
+                "✨ A small step toward clarity.",
+                "🍃 Breathe, write, grow."
+            ]))
+        except Exception as e:
+            print(f"Error sending to {uid}: {e}")
+
+scheduler.add_job(daily, trigger='cron', hour=8)
 
 if __name__=="__main__":
     bot.remove_webhook()
