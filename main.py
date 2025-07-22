@@ -232,14 +232,42 @@ def confirm_delete(call):
     uid = call.from_user.id
     if call.data == "cancel_delete":
         return bot.send_message(uid, "🔒 Your data is safe.")
+    # delete voice files
     c.execute("SELECT voice_path FROM memories WHERE user_id = ?", (uid,))
     for path in [r[0] for r in c.fetchall() if r[0]]:
-        try: os.remove(path)
-        except: pass
+        try:
+            os.remove(path)
+        except:
+            pass
+    # delete from db
     c.execute("DELETE FROM memories WHERE user_id = ?", (uid,))
     c.execute("DELETE FROM users WHERE id = ?", (uid,))
     conn.commit()
-    bot.send_message(uid, "🗑️ Data deleted. You can start fresh with /start")
+    bot.send_message(uid, "🗑️ Your data has been deleted. Use /start to begin again.")
+
+@bot.message_handler(commands=['help'])
+def help_cmd(message):
+    bot.send_message(message.chat.id, """🌱 <b>Welcome to SoulGarden!</b>
+
+Use this bot to track your emotions, thoughts, and voice logs.
+Here’s what you can do:
+/log - Write your memory
+/voice - Send a voice memory
+/memories - See your logs
+/streak - Daily check-in
+/dashboard - Personal dashboard
+/privacy - Read data policy
+
+Stay grounded, grow daily. 🌸""", parse_mode="HTML")
+
+@bot.message_handler(commands=['about'])
+def about_cmd(message):
+    bot.send_message(message.chat.id, "🌸 SoulGarden helps you log thoughts and emotions in a safe, beautiful space.")
+
+@bot.callback_query_handler(func=lambda call: call.data == "about")
+def about_callback(call):
+    about_cmd(call.message)
+
 
 # Web routes
 @app.route("/dashboard/<int:user_id>")
@@ -265,6 +293,19 @@ def admin():
     c.execute("SELECT COUNT(*) FROM memories WHERE timestamp LIKE ?", (f"{today}%",)); new_m = c.fetchone()[0]
     return render_template("admin_analytics.html", total_users=total, new_today=new, total_memories=memories, new_memories=new_m)
 
+
+
+@app.route("/explore/visit_garden/<int:user_id>")
+def explore_user_garden(user_id):
+    c.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    if not user:
+        return "User not found", 404
+    c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10", (user_id,))
+    mems = [{"text": r[0], "mood": r[1], "timestamp": r[2], "voice_path": r[3]} for r in c.fetchall()]
+    return render_template("garden.html", name=user[0], memories=mems)
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
@@ -272,8 +313,9 @@ def privacy():
 @app.route("/leaderboard")
 def leaderboard():
     c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
-    rows = c.fetchall()
+    rows = [(u if u else f"User{i+1}", p) for i, (u, p) in enumerate(c.fetchall())]
     return render_template("leaderboard.html", leaderboard=rows)
+
 
 @app.route("/")
 def index():
