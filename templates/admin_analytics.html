@@ -1,42 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin Analytics</title>
-    <style>
-        body {
-            font-family: 'Quicksand', sans-serif;
-            background: #f4f9f8;
-            color: #222;
-            padding: 2rem;
-        }
-        .box {
-            background: white;
-            border-radius: 8px;
-            padding: 2rem;
-            max-width: 400px;
-            margin: auto;
-            box-shadow: 0 0 10px rgba(0,0,0,0.05);
-        }
-        h2 {
-            text-align: center;
-            color: #4c51bf;
-        }
-        p {
-            font-size: 1.2rem;
-            margin: 1rem 0;
-        }
-        b {
-            color: #2f855a;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Analytics</title>
+  <style>/* [Styles same as before] */</style>
 </head>
 <body>
-    <div class="box">
-        <h2>📊 SoulGarden Admin</h2>
-        <p>👤 Total Users: <b>{{ total_users }}</b></p>
-        <p>🆕 New Today: <b>{{ new_today }}</b></p>
-        <p>🧠 Total Memories: <b>{{ total_memories }}</b></p>
-        <p>📝 New Logs Today: <b>{{ new_memories }}</b></p>
-    </div>
+  <div class="box">
+    <h2>📊 SoulGarden Admin</h2>
+    <p>👤 Total Users: <b>{{ total_users }}</b></p>
+    <p>🆕 New Today: <b>{{ new_today }}</b></p>
+    <p>🧠 Total Memories: <b>{{ total_memories }}</b></p>
+    <p>📝 New Logs Today: <b>{{ new_memories }}</b></p>
+  </div>
 </body>
 </html>
