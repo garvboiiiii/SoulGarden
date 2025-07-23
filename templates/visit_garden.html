@@ -46,7 +46,7 @@
 
   {% for mem in memories %}
   <div class="memory">
-    <p class="timestamp">{{ mem["timestamp"][:10] }} — <span class="mood">{{ mem["mood"] }}</span></p>
+    <p class="timestamp">{{ mem["timestamp"].strftime('%Y-%m-%d') }} — <span class="mood">{{ mem["mood"] }}</span></p>
     <p>{{ mem["text"] }}</p>
     {% if mem["voice"] %}
       <div class="voice">
