@@ -2,37 +2,63 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SoulGarden: Your Memory Garden</title>
+  <title>{{ name }}'s Dashboard – SoulGarden</title>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
-  <style>/* [Styles same as before] */</style>
+  <style>
+    body {
+      font-family: 'Quicksand', sans-serif;
+      background: #f0f4f8;
+      padding: 40px;
+      color: #2d3748;
+    }
+    h1 {
+      font-size: 2.2rem;
+      text-align: center;
+      color: #4c51bf;
+    }
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 30px 0;
+    }
+    .stat {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .memory {
+      background: #fff;
+      border-left: 5px solid #68d391;
+      margin-bottom: 20px;
+      padding: 15px 20px;
+      border-radius: 8px;
+    }
+    audio {
+      width: 100%;
+      margin-top: 8px;
+    }
+  </style>
 </head>
 <body>
-
-  <h1>{{ name }}'s SoulGarden 🌿</h1>
-  <h2>✨ Growing with every thought you logged</h2>
-
+  <h1>🌿 {{ name }}'s SoulGarden</h1>
   <div class="stats">
     <div class="stat">🌱 Points<br><strong>{{ points }}</strong></div>
-    <div class="stat">🔥 Streak<br><strong>{{ streak }} days</strong></div>
-    <div class="stat">👥 Referrals:<br><strong>{{ referrals }}</strong></div>
+    <div class="stat">🔥 Streak<br><strong>{{ streak }}</strong></div>
+    <div class="stat">👥 Referrals<br><strong>{{ referrals }}</strong></div>
   </div>
-
   {% for mem in memories %}
   <div class="memory">
-    <h3>{{ mem.timestamp.strftime('%Y-%m-%d') }} — {{ mem.mood }}</h3>
+    <p><strong>{{ mem.timestamp.strftime('%Y-%m-%d') }}</strong> — Mood: {{ mem.mood }}</p>
     <p>{{ mem.text }}</p>
     {% if mem.voice %}
-    <div class="voice-note">
-      <strong>🎧 Voice Memory:</strong><br>
       <audio controls>
         <source src="/{{ mem.voice }}" type="audio/ogg">
-        Your browser does not support the audio tag.
       </audio>
-    </div>
     {% endif %}
   </div>
   {% endfor %}
-
 </body>
 </html>
