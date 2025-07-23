@@ -58,7 +58,7 @@
     <div class="card">
       {% for mem in garden.memories %}
         <div class="entry">
-          <div class="timestamp">{{ mem.timestamp[:10] }} — <span class="mood">{{ mem.mood }}</span></div>
+          <div class="timestamp">{{ mem.timestamp.strftime('%Y-%m-%d') }} — <span class="mood">{{ mem.mood }}</span></div>
           <p>{{ mem.text }}</p>
         </div>
       {% endfor %}
