@@ -47,15 +47,15 @@ pending_voice = {}
 def menu(uid):
     kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = [
-        "📝 /log", "🎤 /voice",
-        "📜 /memories", "🏆 /leaderboard",
-        "🌍 /explore", "📊 /dashboard",
-        "🔥 /streak", "🔗 /referral",
-        "ℹ️ /help", "🧘 /about",
-        "🔒 /privacy", "🗑️ /delete"
+        "📝 Log Memory", "🎤 Voice",
+        "📜 Memories", "🏆 Leaderboard",
+        "🌍 Explore", "📊 Dashboard",
+        "🔥 Streak", "🔗 /Referral",
+        "ℹ️ Help", "🧘 About",
+        "🔒 Privacy", "🗑️ Delete"
     ]
     if uid == ADMIN_ID:
-        buttons.append("🛠️ /admin")
+        buttons.append("🛠️ Admin")
     kb.add(*[telebot.types.KeyboardButton(b) for b in buttons])
     return kb
 
@@ -133,6 +133,58 @@ def start(msg):
         )
 
     bot.send_message(uid, welcome_msg, reply_markup=menu(uid))
+
+
+
+command_map = {
+    "📝 Log Memory": "/log",
+    "🎤 Voice": "/voice",
+    "📜 Memories": "/memories",
+    "🏆 Leaderboard": "/leaderboard",
+    "🌍 Explore": "/explore",
+    "📊 Dashboard": "/dashboard",
+    "🔥 Streak": "/streak",
+    "🔗 /Referral": "/referral",
+    "ℹ️ Help": "/help",
+    "🧘 About": "/about",
+    "🔒 Privacy": "/privacy",
+    "🗑️ Delete": "/delete",
+    "🛠️ Admin": "/admin"
+}
+
+
+@bot.message_handler(func=lambda m: m.text in command_map)
+def handle_button_commands(msg):
+    actual_command = command_map[msg.text]
+    if actual_command == "/log":
+        log_cmd(msg)
+    elif actual_command == "/voice":
+        voice_cmd(msg)
+    elif actual_command == "/memories":
+        mem_cmd(msg)
+    elif actual_command == "/leaderboard":
+        lead_cmd(msg)
+    elif actual_command == "/explore":
+        explore_cmd(msg)
+    elif actual_command == "/dashboard":
+        dash_cmd(msg)
+    elif actual_command == "/streak":
+        streak_cmd(msg)
+    elif actual_command == "/referral":
+        ref_cmd(msg)
+    elif actual_command == "/help":
+        help_cmd(msg)
+    elif actual_command == "/about":
+        about_cmd(msg)
+    elif actual_command == "/privacy":
+        privacy_cmd(msg)
+    elif actual_command == "/delete":
+        delete_cmd(msg)
+    elif actual_command == "/admin" and msg.from_user.id == ADMIN_ID:
+        admin_cmd(msg)
+
+
+
 
 @bot.message_handler(commands=['admin'])
 def admin_cmd(msg):
