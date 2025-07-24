@@ -42,6 +42,19 @@ c.execute("""CREATE TABLE IF NOT EXISTS memories (
 pending_voice = {}
 
 # --- Utilities ---
+def menu(uid):
+    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    buttons = [
+        "/log", "/voice", "/memories", "/leaderboard",
+        "/explore", "/dashboard", "/streak", "/referral",
+        "/help", "/about", "/privacy", "/delete"
+    ]
+    if uid == ADMIN_ID:
+        buttons.append("/admin")
+    kb.add(*[telebot.types.KeyboardButton(b) for b in buttons])
+    return kb
+
+
 def get_stats(uid):
     c.execute("SELECT streak, points FROM users WHERE id=%s", (uid,))
     r = c.fetchone() or (0, 0)
@@ -67,31 +80,66 @@ def motivation():
 def start(msg):
     uid = msg.from_user.id
     name = msg.from_user.username or f"user{uid}"
+    now = datetime.now(timezone.utc)
     ref = None
+    new_user = False
+
     if len(msg.text.split()) > 1:
         try: ref = int(msg.text.split()[1])
         except: pass
-    if uid != ref:
-        c.execute("""INSERT INTO users (id, username, referred_by, joined_at)
-                     VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
-                  (uid, name, ref, datetime.now(timezone.utc)))
-        if ref:
+
+    # Check if user already exists
+    c.execute("SELECT id FROM users WHERE id = %s", (uid,))
+    existing = c.fetchone()
+
+    if not existing:
+        new_user = True
+        c.execute("""
+            INSERT INTO users (id, username, referred_by, joined_at)
+            VALUES (%s, %s, %s, %s)
+        """, (uid, name, ref if ref != uid else None, now))
+        if ref and ref != uid:
             c.execute("UPDATE users SET points = points + 5 WHERE id = %s", (ref,))
             bot.send_message(ref, f"🎁 +5 points for inviting @{name}")
-    bot.send_message(
-    uid,
-    "🌱 Welcome to SoulGarden!\n\n"
-    "✨ Start your journey with:\n"
-    "📝 /log – Write your thoughts\n"
-    "🎤 /voice – Send voice memories\n"
-    "📜 /memories – View your journal\n"
-    "🌍 /explore – Discover other gardens\n"
-    "📊 /dashboard – View your stats\n"
-    "🌟 /streak – Keep daily momentum\n"
-    "🔗 /referral – Invite & earn rewards\n"
-    "🗑️ /delete – Want a fresh start?\n\n"
-    "💬 Use these commands anytime to navigate your mindful journey."
-    )
+        conn.commit()
+
+    if new_user:
+        welcome_msg = (
+            "🌱 Welcome to SoulGarden!\n\n"
+            "This is your peaceful space to grow, reflect, and bloom.\n\n"
+            "✨ Get started with:\n"
+            "📝 /log – Write your thoughts\n"
+            "🎤 /voice – Send a voice memory\n"
+            "📜 /memories – View your past logs\n"
+            "🌍 /explore – Visit other gardens\n"
+            "📊 /dashboard – See your stats\n"
+            "🌟 /streak – Keep your daily streak alive\n"
+            "🔗 /referral – Invite friends and earn 🌸\n"
+            "🗑️ /delete – Want to start over? Use this\n\n"
+            "💬 Type a command anytime to interact."
+        )
+    else:
+        welcome_msg = (
+            "🌿 Welcome back to SoulGarden!\n\n"
+            "Keep growing your journal 🌸\n"
+            "Use /log or /voice to share your thoughts,\n"
+            "or explore your /memories and /dashboard.\n\n"
+            "Need a restart? /delete\n"
+            "Want to invite friends? /referral"
+        )
+
+    bot.send_message(uid, welcome_msg, reply_markup=menu(uid))
+
+
+
+@bot.message_handler(commands=['admin'])
+def admin_cmd(msg):
+    uid = msg.from_user.id
+    if uid != ADMIN_ID:
+        bot.send_message(uid, "🚫 This section is restricted.")
+        return
+    bot.send_message(uid, f"📊 Admin Panel:\n{WEBHOOK_URL}/admin/analytics?uid={uid}")
+
 
 
 @bot.message_handler(commands=['log'])
@@ -204,14 +252,28 @@ def send_leaderboard(uid):
     bot.send_message(uid, f"🏆 Leaderboard:\n{board}\nOr view at: {WEBHOOK_URL}/leaderboard")
 
 def send_explore(uid):
-    c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != %s ORDER BY RANDOM() LIMIT 5", (uid,))
-    users = c.fetchall()
-    for (other_uid,) in users:
-        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 1", (other_uid,))
-        row = c.fetchone()
-        if row:
-            t, m, ts = row
-            bot.send_message(uid, f"🌿 {ts.strftime('%Y-%m-%d')} • Mood: {m}\n{t}\nVisit: {WEBHOOK_URL}/visit_garden/{other_uid}")
+    try:
+        c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != %s ORDER BY RANDOM() LIMIT 5", (uid,))
+        users = c.fetchall()
+
+        if not users:
+            bot.send_message(uid, "🌱 No new gardens to explore yet.")
+            return
+
+        for (other_uid,) in users:
+            c.execute("""
+                SELECT text, mood, timestamp FROM memories
+                WHERE user_id = %s ORDER BY timestamp DESC LIMIT 1
+            """, (other_uid,))
+            row = c.fetchone()
+            if row:
+                text, mood, ts = row
+                preview = f"🌿 {ts.strftime('%Y-%m-%d')} • Mood: {mood}\n{text}"
+                bot.send_message(uid, preview)
+    except Exception as e:
+        print(f"Explore error: {e}")
+        bot.send_message(uid, "⚠️ Something went wrong exploring gardens.")
+
 
 # --- Flask Webhooks ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
