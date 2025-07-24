@@ -5,7 +5,7 @@ from flask import Flask, request, render_template, abort
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# --- Setup Environment ---
+# --- Environment ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "1335511330"))
@@ -28,34 +28,20 @@ c.execute("""CREATE TABLE IF NOT EXISTS users (
     streak INT DEFAULT 0,
     last_streak TIMESTAMP,
     points INT DEFAULT 0,
-    joined_at TIMESTAMPTZ
+    joined_at TIMESTAMP
 )""")
+
 c.execute("""CREATE TABLE IF NOT EXISTS memories (
     user_id BIGINT,
     text TEXT,
     mood INT,
-    timestamp TIMESTAMPTZ,
+    timestamp TIMESTAMP,
     voice_path TEXT
 )""")
 
 pending_voice = {}
 
-# --- UI ---
-def menu(uid):
-    kb = InlineKeyboardMarkup(row_width=2)
-    buttons = [
-        ("📝 Log", "log"), ("🎤 Voice", "voice"), ("📜 Memories", "memories"),
-        ("🏆 Leaderboard", "leaderboard"), ("🌍 Explore", "explore"),
-        ("📊 Dashboard", "dashboard"), ("🌟 Streak", "streak"),
-        ("🔗 Referral", "referral"), ("📖 Help", "help"),
-        ("🔒 Privacy", "privacy"), ("🧘 About", "about"),
-        ("🗑️ Delete", "delete")
-    ]
-    if uid == ADMIN_ID:
-        buttons.append(("📊 Admin", "admin"))
-    kb.add(*[InlineKeyboardButton(t, callback_data=d) for t, d in buttons])
-    return kb
-# --- Helpers ---
+# --- Utilities ---
 def get_stats(uid):
     c.execute("SELECT streak, points FROM users WHERE id=%s", (uid,))
     r = c.fetchone() or (0, 0)
@@ -92,12 +78,11 @@ def start(msg):
         if ref:
             c.execute("UPDATE users SET points = points + 5 WHERE id = %s", (ref,))
             bot.send_message(ref, f"🎁 +5 points for inviting @{name}")
-    bot.send_message(uid, "🌱 Welcome to SoulGarden!", reply_markup=menu(uid))
+    bot.send_message(uid, "🌱 Welcome to SoulGarden!\nUse /log, /voice, /memories, /explore, /dashboard, etc.")
 
 @bot.message_handler(commands=['log'])
 def log_cmd(msg):
-    uid = msg.from_user.id
-    bot.send_message(uid, "📝 What's on your mind?")
+    bot.send_message(msg.chat.id, "📝 What's on your mind?")
     bot.register_next_step_handler(msg, after_log)
 
 @bot.message_handler(commands=['voice'])
@@ -116,12 +101,12 @@ def lead_cmd(msg): send_leaderboard(msg.from_user.id)
 def explore_cmd(msg): send_explore(msg.from_user.id)
 
 @bot.message_handler(commands=['dashboard'])
-def dash_cmd(msg): bot.send_message(msg.from_user.id, f"📊 Dashboard:\n{WEBHOOK_URL}/dashboard/{msg.from_user.id}")
+def dash_cmd(msg): bot.send_message(msg.chat.id, f"📊 Dashboard:\n{WEBHOOK_URL}/dashboard/{msg.from_user.id}")
 
 @bot.message_handler(commands=['referral'])
 def ref_cmd(msg):
     uid = msg.from_user.id
-    bot.send_message(uid, f"🔗 Invite Link:\nhttps://t.me/{bot.get_me().username}?start={uid}")
+    bot.send_message(uid, f"🔗 Invite:\nhttps://t.me/{bot.get_me().username}?start={uid}")
 
 @bot.message_handler(commands=['streak'])
 def streak_cmd(msg):
@@ -130,52 +115,41 @@ def streak_cmd(msg):
         c.execute("UPDATE users SET streak = streak + 1, last_streak = %s, points = points + 1 WHERE id = %s",
                   (datetime.now(timezone.utc), uid))
         s = get_stats(uid)
-        bot.send_message(uid, f"✅ +1 Streak! Total: {s['streak']}", reply_markup=menu(uid))
+        bot.send_message(uid, f"✅ +1 Streak! Total: {s['streak']}")
     else:
-        bot.send_message(uid, "⏳ Come back after 24 hours.", reply_markup=menu(uid))
+        bot.send_message(uid, "⏳ Come back after 24 hours.")
 
 @bot.message_handler(commands=['help'])
-def help_cmd(msg): bot.send_message(msg.from_user.id, "ℹ️ Use the menu to log emotions, send voice notes, and grow.")
+def help_cmd(msg): bot.send_message(msg.chat.id, "ℹ️ Use /log /voice /memories /explore etc.")
 
 @bot.message_handler(commands=['about'])
-def about_cmd(msg): bot.send_message(msg.from_user.id, "🧘 SoulGarden is a peaceful journal space.")
+def about_cmd(msg): bot.send_message(msg.chat.id, "🧘 SoulGarden is a peaceful journaling space.")
 
 @bot.message_handler(commands=['privacy'])
-def privacy_cmd(msg): bot.send_message(msg.from_user.id, f"🔒 Privacy:\n{WEBHOOK_URL}/privacy")
+def privacy_cmd(msg): bot.send_message(msg.chat.id, f"🔒 Privacy:\n{WEBHOOK_URL}/privacy")
 
 @bot.message_handler(commands=['delete'])
 def delete_cmd(msg):
     uid = msg.from_user.id
-    kb = InlineKeyboardMarkup().row(
-        InlineKeyboardButton("❌ Yes", callback_data="confirm"),
-        InlineKeyboardButton("🙅 Cancel", callback_data="cancel"))
-    bot.send_message(uid, "⚠️ Confirm delete?", reply_markup=kb)
+    bot.send_message(uid, "⚠️ Type 'DELETE' to confirm.")
+    bot.register_next_step_handler(msg, confirm_delete)
 
-# --- Callbacks ---
-@bot.callback_query_handler(func=lambda call: True)
-def on_callback(call):
-    uid, data = call.from_user.id, call.data
-    fake_msg = call.message
-    actions = {
-        "log": log_cmd, "voice": voice_cmd, "memories": mem_cmd,
-        "leaderboard": lead_cmd, "explore": explore_cmd, "dashboard": dash_cmd,
-        "referral": ref_cmd, "streak": streak_cmd, "help": help_cmd,
-        "about": about_cmd, "privacy": privacy_cmd, "delete": delete_cmd,
-        "confirm": lambda msg: delete_all(uid),
-        "cancel": lambda msg: bot.send_message(uid, "✅ Cancelled", reply_markup=menu(uid)),
-        "admin": lambda msg: bot.send_message(uid,
-            f"📊 Admin:\n{WEBHOOK_URL}/admin/analytics?uid={uid}")
-    }
-    if data in actions:
-        actions[data](fake_msg)
-# --- Handlers ---
+def confirm_delete(msg):
+    uid = msg.from_user.id
+    if msg.text.strip().upper() == "DELETE":
+        delete_all(uid)
+        bot.send_message(uid, "🗑️ All data deleted. Send /start to begin again.")
+    else:
+        bot.send_message(uid, "❎ Cancelled.")
+
+# --- Logging ---
 def after_log(msg):
     uid, txt = msg.from_user.id, msg.text.strip()
     c.execute("INSERT INTO memories VALUES (%s, %s, %s, %s, %s)",
               (uid, txt, 0, datetime.now(timezone.utc), None))
     c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
     s = get_stats(uid)
-    bot.send_message(uid, f"💾 Saved!\nPoints: {s['points']}\n{motivation()}", reply_markup=menu(uid))
+    bot.send_message(uid, f"💾 Saved!\nPoints: {s['points']}\n{motivation()}")
 
 @bot.message_handler(content_types=['voice'])
 def handle_voice(msg):
@@ -185,40 +159,35 @@ def handle_voice(msg):
         data = bot.download_file(f.file_path)
         path = f"static/voices/{uid}_{msg.message_id}.ogg"
         os.makedirs("static/voices", exist_ok=True)
-        with open(path, "wb") as fp:
-            fp.write(data)
+        with open(path, "wb") as fp: fp.write(data)
         c.execute("INSERT INTO memories VALUES (%s, %s, %s, %s, %s)",
                   (uid, "(voice)", 5, datetime.now(timezone.utc), path))
         c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
         s = get_stats(uid)
-        bot.send_message(uid, f"🎤 Saved!\nPoints: {s['points']}", reply_markup=menu(uid))
+        bot.send_message(uid, f"🎤 Saved!\nPoints: {s['points']}")
 
+# --- Data ---
 def delete_all(uid):
     c.execute("SELECT voice_path FROM memories WHERE user_id = %s", (uid,))
     for (vp,) in c.fetchall():
-        if vp and os.path.exists(vp):
-            os.remove(vp)
+        if vp and os.path.exists(vp): os.remove(vp)
     c.execute("DELETE FROM memories WHERE user_id = %s", (uid,))
     c.execute("DELETE FROM users WHERE id = %s", (uid,))
-    bot.send_message(uid, "🗑️ All data deleted. Send /start to begin again.")
 
-# --- Display Logic ---
 def show_memories(uid):
     c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 5", (uid,))
     rows = c.fetchall()
     if not rows:
-        bot.send_message(uid, "📭 No memories yet.", reply_markup=menu(uid))
+        bot.send_message(uid, "📭 No memories yet.")
         return
     msg = "\n".join([f"{r[2].strftime('%Y-%m-%d')} — {r[0]}" for r in rows])
-    bot.send_message(uid, f"🗂️ Your Memories:\n{msg}", reply_markup=menu(uid))
+    bot.send_message(uid, f"🗂️ Your Memories:\n{msg}")
 
 def send_leaderboard(uid):
     c.execute("SELECT username, points FROM users ORDER BY points DESC LIMIT 10")
     rows = c.fetchall()
     board = "\n".join([f"{i+1}. @{u or 'anon'} – {p} pts" for i, (u, p) in enumerate(rows)])
-    kb = InlineKeyboardMarkup().row(
-        InlineKeyboardButton("🌐 View Site", url=f"{WEBHOOK_URL}/leaderboard"))
-    bot.send_message(uid, f"🏆 Leaderboard:\n{board}", reply_markup=kb)
+    bot.send_message(uid, f"🏆 Leaderboard:\n{board}\nOr view at: {WEBHOOK_URL}/leaderboard")
 
 def send_explore(uid):
     c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != %s ORDER BY RANDOM() LIMIT 5", (uid,))
@@ -228,11 +197,9 @@ def send_explore(uid):
         row = c.fetchone()
         if row:
             t, m, ts = row
-            kb = InlineKeyboardMarkup().row(
-                InlineKeyboardButton("🌸 Visit Garden", url=f"{WEBHOOK_URL}/visit_garden/{other_uid}"))
-            bot.send_message(uid, f"🌿 {ts.strftime('%Y-%m-%d')} • Mood: {m}\n{t}", reply_markup=kb)
+            bot.send_message(uid, f"🌿 {ts.strftime('%Y-%m-%d')} • Mood: {m}\n{t}\nVisit: {WEBHOOK_URL}/visit_garden/{other_uid}")
 
-# --- Web Routes ---
+# --- Flask Webhooks ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     try:
@@ -244,7 +211,7 @@ def webhook():
         return abort(500)
 
 @app.route("/")
-def home(): return "🌿 SoulGarden Running"
+def home(): return "🌿 SoulGarden Bot Running"
 
 @app.route("/dashboard/<int:uid>")
 def dashboard(uid):
@@ -296,7 +263,7 @@ def analytics():
     return render_template("admin.html", total_users=total, new_today=today,
                            total_memories=memories, new_memories=new_mems)
 
-# --- App Start ---
+# --- Start Bot ---
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
