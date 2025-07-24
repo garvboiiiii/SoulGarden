@@ -78,7 +78,21 @@ def start(msg):
         if ref:
             c.execute("UPDATE users SET points = points + 5 WHERE id = %s", (ref,))
             bot.send_message(ref, f"🎁 +5 points for inviting @{name}")
-    bot.send_message(uid, "🌱 Welcome to SoulGarden!\nUse /log, /voice, /memories, /explore, /dashboard, etc.")
+    bot.send_message(
+    uid,
+    "🌱 Welcome to SoulGarden!\n\n"
+    "✨ Start your journey with:\n"
+    "📝 /log – Write your thoughts\n"
+    "🎤 /voice – Send voice memories\n"
+    "📜 /memories – View your journal\n"
+    "🌍 /explore – Discover other gardens\n"
+    "📊 /dashboard – View your stats\n"
+    "🌟 /streak – Keep daily momentum\n"
+    "🔗 /referral – Invite & earn rewards\n"
+    "🗑️ /delete – Want a fresh start?\n\n"
+    "💬 Use these commands anytime to navigate your mindful journey."
+    )
+
 
 @bot.message_handler(commands=['log'])
 def log_cmd(msg):
