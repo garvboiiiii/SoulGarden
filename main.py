@@ -45,16 +45,20 @@ pending_voice = {}
 
 # --- Utilities ---
 def menu(uid):
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = [
-        "/log", "/voice", "/memories", "/leaderboard",
-        "/explore", "/dashboard", "/streak", "/referral",
-        "/help", "/about", "/privacy", "/delete"
+        "📝 /log", "🎤 /voice",
+        "📜 /memories", "🏆 /leaderboard",
+        "🌍 /explore", "📊 /dashboard",
+        "🔥 /streak", "🔗 /referral",
+        "ℹ️ /help", "🧘 /about",
+        "🔒 /privacy", "🗑️ /delete"
     ]
     if uid == ADMIN_ID:
-        buttons.append("/admin")
-    kb.add(*[KeyboardButton(b) for b in buttons])
+        buttons.append("🛠️ /admin")
+    kb.add(*[telebot.types.KeyboardButton(b) for b in buttons])
     return kb
+
 
 def get_stats(uid):
     c.execute("SELECT streak, points FROM users WHERE id=%s", (uid,))
@@ -172,9 +176,10 @@ def streak_cmd(msg):
         c.execute("UPDATE users SET streak = streak + 1, last_streak = %s, points = points + 1 WHERE id = %s",
                   (datetime.now(timezone.utc), uid))
         s = get_stats(uid)
-        bot.send_message(uid, f"✅ +1 Streak! Total: {s['streak']}")
+        bot.send_message(uid, f"✅ +1 Streak! Total: {s['streak']}", reply_markup=menu(uid))
     else:
-        bot.send_message(uid, "⏳ Come back after 24 hours.")
+        bot.send_message(uid, "⏳ Come back after 24 hours.", reply_markup=menu(uid))
+
 
 @bot.message_handler(commands=['help'])
 def help_cmd(msg): bot.send_message(msg.chat.id, "ℹ️ Use /log /voice /memories /explore etc.")
@@ -249,22 +254,22 @@ def send_explore(uid):
     try:
         c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != %s ORDER BY RANDOM() LIMIT 5", (uid,))
         users = c.fetchall()
+
         if not users:
-            bot.send_message(uid, "🌱 No new gardens to explore yet.")
+            bot.send_message(uid, "🌱 No other gardens to explore yet.")
             return
+
         for (other_uid,) in users:
-            c.execute("""
-                SELECT text, mood, timestamp FROM memories
-                WHERE user_id = %s ORDER BY timestamp DESC LIMIT 1
-            """, (other_uid,))
+            c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = %s ORDER BY timestamp DESC LIMIT 1", (other_uid,))
             row = c.fetchone()
             if row:
                 text, mood, ts = row
                 preview = f"🌿 {ts.strftime('%Y-%m-%d')} • Mood: {mood}\n{text}"
                 bot.send_message(uid, preview)
     except Exception as e:
-        traceback.print_exc()
-        bot.send_message(uid, "⚠️ Something went wrong exploring gardens.")
+        print(f"[Explore Error] {e}")
+        bot.send_message(uid, "⚠️ Something went wrong while exploring gardens.")
+
 
 # --- Flask Web Routes ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
@@ -322,7 +327,8 @@ def visit_garden(uid):
 def analytics():
     uid = request.args.get("uid", type=int)
     if uid != ADMIN_ID:
-        return abort(403)
+        return "Unauthorized", 403
+
     c.execute("SELECT COUNT(*) FROM users")
     total = c.fetchone()[0]
     c.execute("SELECT COUNT(*) FROM users WHERE joined_at >= now() - interval '1 day'")
@@ -331,8 +337,10 @@ def analytics():
     memories = c.fetchone()[0]
     c.execute("SELECT COUNT(*) FROM memories WHERE timestamp >= now() - interval '1 day'")
     new_mems = c.fetchone()[0]
+
     return render_template("admin.html", total_users=total, new_today=today,
                            total_memories=memories, new_memories=new_mems)
+
 
 # --- Start Bot ---
 if __name__ == "__main__":
