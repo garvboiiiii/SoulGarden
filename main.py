@@ -50,7 +50,7 @@ def menu(uid):
         "📝 Log Memory", "🎤 Voice",
         "📜 Memories", "🏆 Leaderboard",
         "🌍 Explore", "📊 Dashboard",
-        "🔥 Streak", "🔗 /Referral",
+        "🔥 Streak", "🔗 Referral",
         "ℹ️ Help", "🧘 About",
         "🔒 Privacy", "🗑️ Delete"
     ]
@@ -144,7 +144,7 @@ command_map = {
     "🌍 Explore": "/explore",
     "📊 Dashboard": "/dashboard",
     "🔥 Streak": "/streak",
-    "🔗 /Referral": "/referral",
+    "🔗 Referral": "/referral",
     "ℹ️ Help": "/help",
     "🧘 About": "/about",
     "🔒 Privacy": "/privacy",
@@ -263,7 +263,7 @@ def after_log(msg):
               (uid, txt, 0, datetime.now(timezone.utc), None))
     c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
     s = get_stats(uid)
-    bot.send_message(uid, f"💾 Saved!\nPoints: {s['points']}\n{motivation()}")
+    bot.send_message(uid, f"💾 Saved!\nPoints: {s['points']}\n{motivation()}", reply_markup=menu(uid))
 
 @bot.message_handler(content_types=['voice'])
 def handle_voice(msg):
@@ -277,7 +277,7 @@ def handle_voice(msg):
                   (uid, "(voice)", 5, datetime.now(timezone.utc), path))
         c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
         s = get_stats(uid)
-        bot.send_message(uid, f"🎤 Saved!\nPoints: {s['points']}")
+        bot.send_message(uid, f"🎤 Saved!\nPoints: {s['points']}", reply_markup=menu(uid))
 
 # --- Data ---
 def delete_all(uid):
@@ -373,7 +373,7 @@ def explore_page():
 def visit_garden(uid):
     c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 5", (uid,))
     mems = [{"text": t, "mood": m, "timestamp": ts, "voice": vp} for t, m, ts, vp in c.fetchall()]
-    return render_template("visit.html", memories=mems)
+    return render_template("visit_garden.html", memories=mems)
 
 @app.route("/admin/analytics")
 def analytics():
@@ -390,7 +390,7 @@ def analytics():
     c.execute("SELECT COUNT(*) FROM memories WHERE timestamp >= now() - interval '1 day'")
     new_mems = c.fetchone()[0]
 
-    return render_template("admin.html", total_users=total, new_today=today,
+    return render_template("admin_analytics.html", total_users=total, new_today=today,
                            total_memories=memories, new_memories=new_mems)
 
 
