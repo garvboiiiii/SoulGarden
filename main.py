@@ -1,8 +1,8 @@
-import os, random, telebot
+import os, random, telebot, traceback
 import psycopg2
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template, abort
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # --- Environment ---
@@ -14,6 +14,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 c = conn.cursor()
+
+os.makedirs("static/voices", exist_ok=True)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -43,7 +45,7 @@ pending_voice = {}
 
 # --- Utilities ---
 def menu(uid):
-    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = [
         "/log", "/voice", "/memories", "/leaderboard",
         "/explore", "/dashboard", "/streak", "/referral",
@@ -51,9 +53,8 @@ def menu(uid):
     ]
     if uid == ADMIN_ID:
         buttons.append("/admin")
-    kb.add(*[telebot.types.KeyboardButton(b) for b in buttons])
+    kb.add(*[KeyboardButton(b) for b in buttons])
     return kb
-
 
 def get_stats(uid):
     c.execute("SELECT streak, points FROM users WHERE id=%s", (uid,))
@@ -88,7 +89,6 @@ def start(msg):
         try: ref = int(msg.text.split()[1])
         except: pass
 
-    # Check if user already exists
     c.execute("SELECT id FROM users WHERE id = %s", (uid,))
     existing = c.fetchone()
 
@@ -130,17 +130,12 @@ def start(msg):
 
     bot.send_message(uid, welcome_msg, reply_markup=menu(uid))
 
-
-
 @bot.message_handler(commands=['admin'])
 def admin_cmd(msg):
-    uid = msg.from_user.id
-    if uid != ADMIN_ID:
-        bot.send_message(uid, "🚫 This section is restricted.")
+    if msg.from_user.id != ADMIN_ID:
+        bot.send_message(msg.chat.id, "🚫 This section is restricted.")
         return
-    bot.send_message(uid, f"📊 Admin Panel:\n{WEBHOOK_URL}/admin/analytics?uid={uid}")
-
-
+    bot.send_message(msg.chat.id, f"📊 Admin Panel:\n{WEBHOOK_URL}/admin/analytics?uid={msg.from_user.id}")
 
 @bot.message_handler(commands=['log'])
 def log_cmd(msg):
@@ -220,7 +215,6 @@ def handle_voice(msg):
         f = bot.get_file(msg.voice.file_id)
         data = bot.download_file(f.file_path)
         path = f"static/voices/{uid}_{msg.message_id}.ogg"
-        os.makedirs("static/voices", exist_ok=True)
         with open(path, "wb") as fp: fp.write(data)
         c.execute("INSERT INTO memories VALUES (%s, %s, %s, %s, %s)",
                   (uid, "(voice)", 5, datetime.now(timezone.utc), path))
@@ -255,11 +249,9 @@ def send_explore(uid):
     try:
         c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != %s ORDER BY RANDOM() LIMIT 5", (uid,))
         users = c.fetchall()
-
         if not users:
             bot.send_message(uid, "🌱 No new gardens to explore yet.")
             return
-
         for (other_uid,) in users:
             c.execute("""
                 SELECT text, mood, timestamp FROM memories
@@ -271,11 +263,10 @@ def send_explore(uid):
                 preview = f"🌿 {ts.strftime('%Y-%m-%d')} • Mood: {mood}\n{text}"
                 bot.send_message(uid, preview)
     except Exception as e:
-        print(f"Explore error: {e}")
+        traceback.print_exc()
         bot.send_message(uid, "⚠️ Something went wrong exploring gardens.")
 
-
-# --- Flask Webhooks ---
+# --- Flask Web Routes ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     try:
@@ -302,7 +293,8 @@ def dashboard(uid):
                            referrals=refs, memories=mems)
 
 @app.route("/privacy")
-def privacy(): return "🔒 We don't share or misuse your data."
+def privacy():
+    return render_template("privacy.html")
 
 @app.route("/leaderboard")
 def leaderboard_page():
@@ -328,6 +320,9 @@ def visit_garden(uid):
 
 @app.route("/admin/analytics")
 def analytics():
+    uid = request.args.get("uid", type=int)
+    if uid != ADMIN_ID:
+        return abort(403)
     c.execute("SELECT COUNT(*) FROM users")
     total = c.fetchone()[0]
     c.execute("SELECT COUNT(*) FROM users WHERE joined_at >= now() - interval '1 day'")
@@ -341,6 +336,7 @@ def analytics():
 
 # --- Start Bot ---
 if __name__ == "__main__":
+    print("🌿 SoulGarden bot starting...")
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
     app.run(host="0.0.0.0", port=8080)
