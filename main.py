@@ -233,13 +233,49 @@ def ref_cmd(msg):
 @bot.message_handler(commands=['streak'])
 def streak_cmd(msg):
     uid = msg.from_user.id
-    if valid_streak(uid):
-        c.execute("UPDATE users SET streak = streak + 1, last_streak = %s, points = points + 1 WHERE id = %s",
-                  (datetime.now(timezone.utc), uid))
-        s = get_stats(uid)
-        bot.send_message(uid, f"✅ +1 Streak! Total: {s['streak']}", reply_markup=menu(uid))
-    else:
-        bot.send_message(uid, "⏳ Come back after 24 hours.", reply_markup=menu(uid))
+
+    try:
+        # Get last streak date
+        c.execute("SELECT streak, last_streak, points FROM users WHERE id=%s", (uid,))
+        row = c.fetchone()
+
+        if not row:
+            bot.send_message(uid, "⚠️ You're not registered yet. Please send /start.", reply_markup=menu(uid))
+            return
+
+        streak, last_streak, points = row
+        now = datetime.now(timezone.utc).date()
+
+        if last_streak:
+            last = last_streak.date()
+            days_diff = (now - last).days
+
+            if days_diff == 0:
+                # Already claimed today
+                bot.send_message(uid, "📆 You've already claimed today's streak!\nCome back tomorrow 🌞", reply_markup=menu(uid))
+                return
+            elif days_diff > 1:
+                # Missed streak
+                streak = 0
+                c.execute("UPDATE users SET streak = 0 WHERE id = %s", (uid,))
+                conn.commit()
+
+        # Eligible for new streak
+        new_streak = streak + 1
+        new_points = points + 1
+        c.execute("""
+            UPDATE users
+            SET streak = %s, last_streak = %s, points = %s
+            WHERE id = %s
+        """, (new_streak, datetime.now(timezone.utc), new_points, uid))
+        conn.commit()
+
+        bot.send_message(uid, f"✅ +1 Streak!\n🔥 Streak: {new_streak} days\n🏆 Points: {new_points}\n{motivation()}", reply_markup=menu(uid))
+
+    except Exception as e:
+        print("[Streak Error]", e)
+        bot.send_message(uid, "⚠️ Something went wrong while updating your streak. Please try again later.")
+
 
 
 @bot.message_handler(commands=['help'])
