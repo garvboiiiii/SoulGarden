@@ -42,6 +42,15 @@ c.execute("""CREATE TABLE IF NOT EXISTS memories (
 )""")
 
 pending_voice = {}
+pending_mood = {}
+MOOD_LABELS = {
+    "🙂 Happy": 5,
+    "😊 Grateful": 4,
+    "😐 Neutral": 3,
+    "😢 Sad": 2,
+    "😡 Angry": 1,
+    "😨 Anxious": 0
+}
 
 # --- Utilities ---
 def menu(uid):
@@ -259,11 +268,13 @@ def confirm_delete(msg):
 # --- Logging ---
 def after_log(msg):
     uid, txt = msg.from_user.id, msg.text.strip()
-    c.execute("INSERT INTO memories VALUES (%s, %s, %s, %s, %s)",
-              (uid, txt, 0, datetime.now(timezone.utc), None))
-    c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
-    s = get_stats(uid)
-    bot.send_message(uid, f"💾 Saved!\nPoints: {s['points']}\n{motivation()}", reply_markup=menu(uid))
+    pending_mood[uid] = txt
+
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    mood_buttons = list(MOOD_LABELS.keys()) + ["⏭️ Skip"]
+    kb.add(*[KeyboardButton(b) for b in mood_buttons])
+    bot.send_message(uid, "🧠 How are you feeling?", reply_markup=kb)
+
 
 @bot.message_handler(content_types=['voice'])
 def handle_voice(msg):
@@ -272,12 +283,34 @@ def handle_voice(msg):
         f = bot.get_file(msg.voice.file_id)
         data = bot.download_file(f.file_path)
         path = f"static/voices/{uid}_{msg.message_id}.ogg"
-        with open(path, "wb") as fp: fp.write(data)
-        c.execute("INSERT INTO memories VALUES (%s, %s, %s, %s, %s)",
-                  (uid, "(voice)", 5, datetime.now(timezone.utc), path))
-        c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
-        s = get_stats(uid)
-        bot.send_message(uid, f"🎤 Saved!\nPoints: {s['points']}", reply_markup=menu(uid))
+        with open(path, "wb") as fp:
+            fp.write(data)
+        pending_mood[uid] = "(voice)"
+        pending_voice[uid] = path  # reuse for path
+        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        mood_buttons = list(MOOD_LABELS.keys()) + ["⏭️ Skip"]
+        kb.add(*[KeyboardButton(b) for b in mood_buttons])
+        bot.send_message(uid, "🧠 How did this voice memory feel?", reply_markup=kb)
+
+@bot.message_handler(func=lambda m: m.text in MOOD_LABELS or m.text == "⏭️ Skip")
+def handle_mood_choice(msg):
+    uid = msg.from_user.id
+    text = pending_mood.pop(uid, None)
+    voice_path = pending_voice.pop(uid, None) if isinstance(pending_voice.get(uid), str) else None
+
+    if not text:
+        bot.send_message(uid, "⚠️ Something went wrong. Please try again.", reply_markup=menu(uid))
+        return
+
+    mood = MOOD_LABELS.get(msg.text) if msg.text != "⏭️ Skip" else None
+
+    c.execute("INSERT INTO memories VALUES (%s, %s, %s, %s, %s)",
+              (uid, text, mood, datetime.now(timezone.utc), voice_path))
+    c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
+    s = get_stats(uid)
+    bot.send_message(uid, f"💾 Saved!\nPoints: {s['points']}\n{motivation()}", reply_markup=menu(uid))
+    
+
 
 # --- Data ---
 def delete_all(uid):
