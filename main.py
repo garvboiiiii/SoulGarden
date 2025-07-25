@@ -52,6 +52,9 @@ MOOD_LABELS = {
     "😨 Anxious": 0
 }
 
+MOOD_DISPLAY = {v: k for k, v in MOOD_LABELS.items()}
+
+
 # --- Utilities ---
 def menu(uid):
     kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -416,7 +419,7 @@ def dashboard(uid):
     c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id=%s ORDER BY timestamp DESC", (uid,))
     mems = [{"text": t, "mood": m, "timestamp": ts, "voice": vp} for t, m, ts, vp in c.fetchall()]
     return render_template("dashboard.html", name=u[0] or "anon", streak=u[1], points=u[2],
-                           referrals=refs, memories=mems)
+                           referrals=refs, memories=mems, mood_display=MOOD_DISPLAY)
 
 @app.route("/privacy")
 def privacy():
@@ -436,13 +439,13 @@ def explore_page():
         c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 3", (uid,))
         mems = [{"text": t, "mood": m, "timestamp": ts} for t, m, ts in c.fetchall()]
         gardens.append({"memories": mems})
-    return render_template("explore.html", gardens=gardens)
+    return render_template("explore.html", gardens=gardens, mood_display=MOOD_DISPLAY)
 
 @app.route("/visit_garden/<int:uid>")
 def visit_garden(uid):
     c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 5", (uid,))
     mems = [{"text": t, "mood": m, "timestamp": ts, "voice": vp} for t, m, ts, vp in c.fetchall()]
-    return render_template("visit_garden.html", memories=mems)
+    return render_template("visit_garden.html", memories=mems, mood_display=MOOD_DISPLAY)
 
 @app.route("/admin/analytics")
 def analytics():
