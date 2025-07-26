@@ -48,7 +48,7 @@
     <div class="card">
       <p><strong>{{ g.timestamp.strftime('%Y-%m-%d') }}</strong> — Mood: {{ g.mood }}</p>
       <p>{{ g.text }}</p>
-      <a class="btn" href="/visit_garden?uid={{ g.uid }}">🌿 Visit Garden</a>
+      <a class="btn" href="/visit_garden/{{ g.uid }}">🌿 Visit Garden</a>
     </div>
     {% endfor %}
   {% else %}
