@@ -64,7 +64,8 @@ def menu(uid):
         "🌍 Explore", "📊 Dashboard",
         "🔥 Streak", "🔗 Referral",
         "ℹ️ Help", "🧘 About",
-        "🔒 Privacy", "🗑️ Delete"
+        "🔒 Privacy", "🗑️ Delete",
+        "💬 Feedback"
     ]
     if uid == ADMIN_ID:
         buttons.append("🛠️ Admin")
@@ -161,7 +162,8 @@ command_map = {
     "🧘 About": "/about",
     "🔒 Privacy": "/privacy",
     "🗑️ Delete": "/delete",
-    "🛠️ Admin": "/admin"
+    "🛠️ Admin": "/admin",
+    "💬 Feedback": "/feedback"
 }
 
 
@@ -204,6 +206,14 @@ def admin_cmd(msg):
         bot.send_message(msg.chat.id, "🚫 This section is restricted.")
         return
     bot.send_message(msg.chat.id, f"📊 Admin Panel:\n{WEBHOOK_URL}/admin/analytics?uid={msg.from_user.id}")
+
+
+@bot.message_handler(commands=['feedback'])
+def feedback_cmd(msg):
+    kb = telebot.types.InlineKeyboardMarkup()
+    twitter_button = telebot.types.InlineKeyboardButton("🐦 Give Feedback on Twitter", url="https://twitter.com/s0ulGarden_Bot")
+    kb.add(twitter_button)
+    bot.send_message(msg.chat.id, "We’d love to hear your thoughts! 💬", reply_markup=kb)
 
 @bot.message_handler(commands=['log'])
 def log_cmd(msg):
