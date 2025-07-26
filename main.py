@@ -464,27 +464,43 @@ def explore():
     if not uid:
         return "Missing user ID", 400
 
+    # Get all other user_ids who have memories
     c.execute("""
-        SELECT DISTINCT ON (user_id) user_id 
+        SELECT DISTINCT user_id 
         FROM memories 
-        WHERE user_id != %s 
-        ORDER BY user_id, RANDOM()
+        WHERE user_id != %s
     """, (uid,))
-    users = c.fetchall()
+    all_others = [row[0] for row in c.fetchall()]
+
+    if not all_others:
+        return render_template("explore.html", gardens=[], my_uid=uid)
+
+    # Shuffle and pick 5 (or less if not available)
+    
+    random.shuffle(all_others)
+    selected_uids = all_others[:5]
 
     gardens = []
-    for (other_uid,) in users:
+    for other_uid in selected_uids:
         c.execute("""
             SELECT text, mood, timestamp 
             FROM memories 
             WHERE user_id = %s 
-            ORDER BY timestamp DESC LIMIT 3
+            ORDER BY timestamp DESC 
+            LIMIT 1
         """, (other_uid,))
-        rows = c.fetchall()
-        memories = [{"text": t, "mood": m, "timestamp": ts} for t, m, ts in rows]
-        gardens.append({"uid": other_uid, "memories": memories})
+        row = c.fetchone()
+        if row:
+            text, mood, timestamp = row
+            mood_display = MOOD_MAP.get(mood, "❓ Skipped")
+            gardens.append({
+                "uid": other_uid,
+                "text": text or "(No text)",
+                "mood": mood_display,
+                "timestamp": timestamp
+            })
 
-    return render_template("explore.html", gardens=gardens)
+    return render_template("explore.html", gardens=gardens, my_uid=uid)
     
 
 @app.route("/visit_garden/<int:uid>")
