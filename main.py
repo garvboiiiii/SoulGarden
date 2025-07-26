@@ -386,7 +386,12 @@ def send_leaderboard(uid):
 
 def send_explore(uid):
     try:
-        c.execute("SELECT DISTINCT user_id FROM memories WHERE user_id != %s ORDER BY RANDOM() LIMIT 5", (uid,))
+        c.execute("""
+            SELECT DISTINCT ON (user_id) user_id 
+            FROM memories 
+            WHERE user_id != %s 
+            ORDER BY user_id, RANDOM()
+        """, (uid,))
         users = c.fetchall()
 
         if not users:
@@ -394,15 +399,24 @@ def send_explore(uid):
             return
 
         for (other_uid,) in users:
-            c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id = %s ORDER BY timestamp DESC LIMIT 1", (other_uid,))
+            c.execute("""
+                SELECT text, mood, timestamp 
+                FROM memories 
+                WHERE user_id = %s 
+                ORDER BY timestamp DESC LIMIT 1
+            """, (other_uid,))
             row = c.fetchone()
             if row:
                 text, mood, ts = row
+                text = text or "(No memory text)"
+                mood = mood if mood is not None else "Skipped"
                 preview = f"🌿 {ts.strftime('%Y-%m-%d')} • Mood: {mood}\n{text}"
                 bot.send_message(uid, preview)
     except Exception as e:
-        print(f"[Explore Error] {e}")
+        import traceback
+        traceback.print_exc()
         bot.send_message(uid, "⚠️ Something went wrong while exploring gardens.")
+
 
 
 # --- Flask Web Routes ---
