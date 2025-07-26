@@ -525,9 +525,32 @@ def explore():
 
 @app.route("/visit_garden/<int:uid>")
 def visit_garden(uid):
-    c.execute("SELECT text, mood, timestamp, voice_path FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 5", (uid,))
-    mems = [{"text": t, "mood": m, "timestamp": ts, "voice": vp} for t, m, ts, vp in c.fetchall()]
-    return render_template("visit_garden.html", memories=mems, mood_display=MOOD_DISPLAY)
+    try:
+        c.execute("""
+            SELECT text, mood, timestamp, voice_path 
+            FROM memories 
+            WHERE user_id=%s 
+            AND (text IS NOT NULL OR voice_path IS NOT NULL)
+            ORDER BY timestamp DESC 
+            LIMIT 5
+        """, (uid,))
+        rows = c.fetchall()
+
+        memories = []
+        for text, mood, timestamp, voice_path in rows:
+            memories.append({
+                "text": text or "(No text)",
+                "mood": MOOD_DISPLAY.get(mood, "❓ Skipped"),
+                "timestamp": timestamp,
+                "voice": voice_path  # path to audio
+            })
+
+        return render_template("visit_garden.html", memories=memories)
+
+    except Exception as e:
+        print("[Visit Garden Error]", e)
+        return "Something went wrong while visiting the garden.", 500
+
 
 @app.route("/admin/analytics")
 def analytics():
