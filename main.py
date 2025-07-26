@@ -498,7 +498,7 @@ def explore():
                 SELECT text, mood, timestamp 
                 FROM memories 
                 WHERE user_id = %s 
-                AND (text IS NOT NULL OR voice IS NOT NULL)
+                AND (text IS NOT NULL OR voice_path IS NOT NULL)
                 ORDER BY timestamp DESC 
                 LIMIT 1
             """, (other_uid,))
