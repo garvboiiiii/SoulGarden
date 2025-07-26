@@ -233,7 +233,10 @@ def mem_cmd(msg): show_memories(msg.from_user.id)
 def lead_cmd(msg): send_leaderboard(msg.from_user.id)
 
 @bot.message_handler(commands=['explore'])
-def explore_cmd(msg): send_explore(msg.from_user.id)
+def explore_cmd(msg):
+    uid = msg.from_user.id
+    url = f"https://soulgarden.up.railway.app/explore?uid={uid}"
+    bot.send_message(uid, f"🌍 Explore soul gardens here:\n🔗 {url}")
 
 @bot.message_handler(commands=['dashboard'])
 def dash_cmd(msg): bot.send_message(msg.chat.id, f"📊 Dashboard:\n{WEBHOOK_URL}/dashboard/{msg.from_user.id}")
@@ -456,14 +459,33 @@ def leaderboard_page():
     return render_template("leaderboard.html", users=users)
 
 @app.route("/explore")
-def explore_page():
-    c.execute("SELECT DISTINCT user_id FROM memories ORDER BY RANDOM() LIMIT 5")
+def explore():
+    uid = request.args.get("uid")
+    if not uid:
+        return "Missing user ID", 400
+
+    c.execute("""
+        SELECT DISTINCT ON (user_id) user_id 
+        FROM memories 
+        WHERE user_id != %s 
+        ORDER BY user_id, RANDOM()
+    """, (uid,))
+    users = c.fetchall()
+
     gardens = []
-    for (uid,) in c.fetchall():
-        c.execute("SELECT text, mood, timestamp FROM memories WHERE user_id=%s ORDER BY timestamp DESC LIMIT 3", (uid,))
-        mems = [{"text": t, "mood": m, "timestamp": ts} for t, m, ts in c.fetchall()]
-        gardens.append({"memories": mems})
-    return render_template("explore.html", gardens=gardens, mood_display=MOOD_DISPLAY)
+    for (other_uid,) in users:
+        c.execute("""
+            SELECT text, mood, timestamp 
+            FROM memories 
+            WHERE user_id = %s 
+            ORDER BY timestamp DESC LIMIT 3
+        """, (other_uid,))
+        rows = c.fetchall()
+        memories = [{"text": t, "mood": m, "timestamp": ts} for t, m, ts in rows]
+        gardens.append({"uid": other_uid, "memories": memories})
+
+    return render_template("explore.html", gardens=gardens)
+    
 
 @app.route("/visit_garden/<int:uid>")
 def visit_garden(uid):
