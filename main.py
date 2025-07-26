@@ -196,8 +196,8 @@ def handle_button_commands(msg):
         delete_cmd(msg)
     elif actual_command == "/admin" and msg.from_user.id == ADMIN_ID:
         admin_cmd(msg)
-
-
+    elif actual_command == "/feedback":
+        feedback_cmd(msg)
 
 
 @bot.message_handler(commands=['admin'])
