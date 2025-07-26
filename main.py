@@ -43,6 +43,7 @@ c.execute("""CREATE TABLE IF NOT EXISTS memories (
 
 pending_voice = {}
 pending_mood = {}
+
 MOOD_LABELS = {
     "🙂 Happy": 5,
     "😊 Grateful": 4,
@@ -51,6 +52,17 @@ MOOD_LABELS = {
     "😡 Angry": 1,
     "😨 Anxious": 0
 }
+
+MOOD_MAP = {
+    5: "🙂 Happy",
+    4: "😊 Grateful",
+    3: "😐 Neutral",
+    2: "😢 Sad",
+    1: "😡 Angry",
+    0: "😨 Anxious",
+    None: "❓ Skipped"
+}
+
 
 MOOD_DISPLAY = {v: k for k, v in MOOD_LABELS.items()}
 
@@ -460,47 +472,55 @@ def leaderboard_page():
 
 @app.route("/explore")
 def explore():
-    uid = request.args.get("uid")
-    if not uid:
-        return "Missing user ID", 400
+    try:
+        uid = request.args.get("uid")
+        if not uid:
+            return "Missing user ID", 400
 
-    # Get all other user_ids who have memories
-    c.execute("""
-        SELECT DISTINCT user_id 
-        FROM memories 
-        WHERE user_id != %s
-    """, (uid,))
-    all_others = [row[0] for row in c.fetchall()]
-
-    if not all_others:
-        return render_template("explore.html", gardens=[], my_uid=uid)
-
-    # Shuffle and pick 5 (or less if not available)
-    
-    random.shuffle(all_others)
-    selected_uids = all_others[:5]
-
-    gardens = []
-    for other_uid in selected_uids:
+        # Get all distinct other user IDs who have memories
         c.execute("""
-            SELECT text, mood, timestamp 
+            SELECT DISTINCT user_id 
             FROM memories 
-            WHERE user_id = %s 
-            ORDER BY timestamp DESC 
-            LIMIT 1
-        """, (other_uid,))
-        row = c.fetchone()
-        if row:
-            text, mood, timestamp = row
-            mood_display = MOOD_MAP.get(mood, "❓ Skipped")
-            gardens.append({
-                "uid": other_uid,
-                "text": text or "(No text)",
-                "mood": mood_display,
-                "timestamp": timestamp
-            })
+            WHERE user_id != %s
+        """, (uid,))
+        all_others = [row[0] for row in c.fetchall()]
 
-    return render_template("explore.html", gardens=gardens, my_uid=uid)
+        if not all_others:
+            return render_template("explore.html", gardens=[], my_uid=uid)
+
+        # Randomly select 5
+        random.shuffle(all_others)
+        selected_uids = all_others[:5]
+
+        gardens = []
+        for other_uid in selected_uids:
+            c.execute("""
+                SELECT text, mood, timestamp 
+                FROM memories 
+                WHERE user_id = %s 
+                AND (text IS NOT NULL OR voice IS NOT NULL)
+                ORDER BY timestamp DESC 
+                LIMIT 1
+            """, (other_uid,))
+            row = c.fetchone()
+            if row:
+                text = row[0] or "(No text)"
+                mood = row[1]
+                timestamp = row[2]
+                mood_display = MOOD_MAP.get(mood, "❓ Skipped")
+                gardens.append({
+                    "uid": other_uid,
+                    "text": text,
+                    "mood": mood_display,
+                    "timestamp": timestamp
+                })
+
+        return render_template("explore.html", gardens=gardens, my_uid=uid)
+
+    except Exception as e:
+        print("[Explore Error]", str(e))
+        return "Something went wrong while exploring. Please try again.", 500
+
     
 
 @app.route("/visit_garden/<int:uid>")
