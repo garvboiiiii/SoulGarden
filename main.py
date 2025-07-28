@@ -1,5 +1,4 @@
 import os, random, telebot, traceback
-from telegram.ext import CommandHandler
 import psycopg2
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template, abort
@@ -106,50 +105,6 @@ def motivation():
         "🍀 You're never alone here.", "✨ Great job journaling!"
     ])
 
-
-def poll(update, context):
-    question = "🌿 What would you love to see next in SoulGarden?"
-    options = [
-        "Daily Mood Reminder",
-        "More Garden Themes",
-        "Voice Notes from Others",
-        "Gratitude Journal",
-        "Leaderboard / Streak Challenges",
-        "Something Else (Type via /suggest)"
-    ]
-
-    context.bot.send_poll(
-        chat_id=update.effective_chat.id,
-        question=question,
-        options=options,
-        is_anonymous=True,
-        allows_multiple_answers=False
-    )
-
-# Register this command
-dispatcher.add_handler(CommandHandler("poll", poll))
-
-
-
-def suggest(update, context):
-    user_id = update.effective_user.id
-    msg = " ".join(context.args)
-
-    if not msg:
-        update.message.reply_text("✍️ Type your suggestion like this:\n`/suggest Add a dark mode UI`", parse_mode='Markdown')
-        return
-
-    # Send suggestion to admin
-    for admin in ADMIN_ID:
-        context.bot.send_message(
-            chat_id=admin,
-            text=f"💡 Suggestion from {user_id}:\n\n{msg}"
-        )
-
-    update.message.reply_text("🌸 Thanks! Your idea has been sent. We're always listening.")
-
-# Register this command too
-dispatcher.add_handler(CommandHandler("suggest", suggest))
 
 # --- Commands ---
 @bot.message_handler(commands=['start'])
@@ -266,6 +221,42 @@ def admin_cmd(msg):
     bot.send_message(msg.chat.id, f"📊 Admin Panel:\n{WEBHOOK_URL}/admin/analytics?uid={msg.from_user.id}")
 
 
+@bot.message_handler(commands=['poll'])
+def send_poll(msg):
+    if msg.from_user.id != ADMIN_ID:
+        bot.reply_to(msg, "❌ You are not authorized to send polls.")
+        return
+    
+    poll_question = "🌸 What do you like most about SoulGarden?"
+    options = ["🌼 UI design", "🎙 Voice journaling", "📊 Mood tracking", "🧘 Simplicity", "📝 Others"]
+
+    # Send the poll
+    bot.send_poll(
+        chat_id=msg.chat.id,
+        question=poll_question,
+        options=options,
+        is_anonymous=True,
+        allows_multiple_answers=False
+    )
+
+    # Follow-up message for suggestions
+    bot.send_message(
+        msg.chat.id,
+        "💡 If you selected 'Others', or have additional feedback, please use:\n/suggest <your message>\n\nWe’d love to hear from you! 🌱"
+    )
+
+
+@bot.message_handler(commands=['suggest'])
+def handle_suggestion(msg):
+    parts = msg.text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        bot.reply_to(msg, "💬 Please use it like this:\n/suggest Your feedback or idea here.")
+        return
+
+    suggestion = parts[1].strip()
+    bot.send_message(ADMIN_ID, f"📩 New suggestion from {msg.from_user.id}:\n{suggestion}")
+    bot.reply_to(msg, "✅ Thanks for your suggestion! Your thoughts help SoulGarden grow! 🌷")
+
 @bot.message_handler(commands=['feedback'])
 def feedback_cmd(msg):
     kb = telebot.types.InlineKeyboardMarkup()
@@ -353,7 +344,21 @@ def streak_cmd(msg):
 
 
 @bot.message_handler(commands=['help'])
-def help_cmd(msg): bot.send_message(msg.chat.id, "ℹ️ Use /log /voice /memories /explore etc.")
+def help_cmd(msg):
+    help_text = (
+        "🌿 *Welcome to SoulGarden Help!*\n\n"
+        "Here are the commands you can use:\n\n"
+        "• /start – Begin your SoulGarden journey\n"
+        "• /log or /voice – Share your mood or voice journal\n"
+        "• /explore – Discover anonymous gardens by others\n"
+        "• /dashboard – View your Dashboard\n"
+        "• /suggest <message> – 💡 Share feedback or ideas\n"
+        "• /help – Show this help message\n\n"
+        "We’re always growing 🌱 and your thoughts help us bloom! 🌸"
+    )
+
+    bot.send_message(msg.chat.id, help_text, parse_mode="Markdown")
+
 
 @bot.message_handler(commands=['about'])
 def about_cmd(msg): bot.send_message(msg.chat.id, "🧘 SoulGarden is a peaceful journaling space.")
