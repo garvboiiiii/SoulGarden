@@ -1,5 +1,6 @@
 import os, random, telebot, traceback
 import psycopg2
+import pytz
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template, abort
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
@@ -226,24 +227,37 @@ def send_poll(msg):
     if msg.from_user.id != ADMIN_ID:
         bot.reply_to(msg, "❌ You are not authorized to send polls.")
         return
-    
+
     poll_question = "🌸 What do you like most about SoulGarden?"
     options = ["🌼 UI design", "🎙 Voice journaling", "📊 Mood tracking", "🧘 Simplicity", "📝 Others"]
 
-    # Send the poll
-    bot.send_poll(
-        chat_id=msg.chat.id,
-        question=poll_question,
-        options=options,
-        is_anonymous=True,
-        allows_multiple_answers=False
-    )
+    try:
+        c.execute("SELECT id FROM users")
+        all_users = c.fetchall()
+        count = 0
 
-    # Follow-up message for suggestions
-    bot.send_message(
-        msg.chat.id,
-        "💡 If you selected 'Others', or have additional feedback, please use:\n/suggest <your message>\n\nWe’d love to hear from you! 🌱"
-    )
+        for row in all_users:
+            user_id = row[0]
+            try:
+                bot.send_poll(
+                    chat_id=user_id,
+                    question=poll_question,
+                    options=options,
+                    is_anonymous=True,
+                    allows_multiple_answers=False
+                )
+                bot.send_message(
+                    user_id,
+                    "💡 If you selected 'Others' or have more feedback, use:\n/suggest <your idea>"
+                )
+                count += 1
+            except Exception as e:
+                print(f"[Poll Error] Could not message {user_id}: {e}")
+
+        bot.reply_to(msg, f"✅ Poll sent to {count} users.")
+    except Exception as e:
+        print(f"[Poll Broadcast Error]: {e}")
+        bot.reply_to(msg, "Something went wrong while sending the poll.")
 
 
 @bot.message_handler(commands=['suggest'])
@@ -450,6 +464,21 @@ def send_leaderboard(uid):
     board = "\n".join([f"{i+1}. @{u or 'anon'} – {p} pts" for i, (u, p) in enumerate(rows)])
     bot.send_message(uid, f"🏆 Leaderboard:\n{board}\nOr view at: {WEBHOOK_URL}/leaderboard")
 
+
+def send_daily_reminder():
+    try:
+        c.execute("SELECT id FROM users")
+        all_users = c.fetchall()
+
+        for row in all_users:
+            user_id = row[0]
+            try:
+                bot.send_message(user_id, "🌞 Hey there! Don't forget to share a memory or check your garden today 🌿")
+            except Exception as e:
+                print(f"[Reminder Error] Couldn't message {user_id}: {e}")
+    except Exception as e:
+        print(f"[Reminder DB Error]: {e}")
+
 def send_explore(uid):
     try:
         c.execute("""
@@ -628,3 +657,10 @@ if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
     app.run(host="0.0.0.0", port=8080)
+
+
+
+# --- Daily Reminder ---
+scheduler = BackgroundScheduler(timezone=pytz.timezone("Asia/Kolkata"))
+scheduler.add_job(send_daily_reminder, trigger="cron", hour=20, minute=0)  # 8 PM IST
+scheduler.start()
