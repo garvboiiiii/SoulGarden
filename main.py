@@ -1,4 +1,5 @@
 import os, random, telebot, traceback
+from telegram.ext import CommandHandler
 import psycopg2
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template, abort
@@ -104,6 +105,51 @@ def motivation():
         "🌿 Reflection brings clarity.", "🌸 Peace begins with you.",
         "🍀 You're never alone here.", "✨ Great job journaling!"
     ])
+
+
+def poll(update, context):
+    question = "🌿 What would you love to see next in SoulGarden?"
+    options = [
+        "Daily Mood Reminder",
+        "More Garden Themes",
+        "Voice Notes from Others",
+        "Gratitude Journal",
+        "Leaderboard / Streak Challenges",
+        "Something Else (Type via /suggest)"
+    ]
+
+    context.bot.send_poll(
+        chat_id=update.effective_chat.id,
+        question=question,
+        options=options,
+        is_anonymous=True,
+        allows_multiple_answers=False
+    )
+
+# Register this command
+dispatcher.add_handler(CommandHandler("poll", poll))
+
+
+
+def suggest(update, context):
+    user_id = update.effective_user.id
+    msg = " ".join(context.args)
+
+    if not msg:
+        update.message.reply_text("✍️ Type your suggestion like this:\n`/suggest Add a dark mode UI`", parse_mode='Markdown')
+        return
+
+    # Send suggestion to admin
+    for admin in ADMIN_ID:
+        context.bot.send_message(
+            chat_id=admin,
+            text=f"💡 Suggestion from {user_id}:\n\n{msg}"
+        )
+
+    update.message.reply_text("🌸 Thanks! Your idea has been sent. We're always listening.")
+
+# Register this command too
+dispatcher.add_handler(CommandHandler("suggest", suggest))
 
 # --- Commands ---
 @bot.message_handler(commands=['start'])
