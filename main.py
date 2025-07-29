@@ -223,41 +223,32 @@ def admin_cmd(msg):
 
 
 @bot.message_handler(commands=['poll'])
-def send_poll(msg):
+def send_crypto_puzzle_poll(msg):
     if msg.from_user.id != ADMIN_ID:
-        bot.reply_to(msg, "❌ You are not authorized to send polls.")
+        bot.reply_to(msg, "❌ You're not authorized to send this poll.")
         return
 
-    poll_question = "🌸 What do you like most about SoulGarden?"
-    options = ["🌼 UI design", "🎙 Voice journaling", "📊 Mood tracking", "🧘 Simplicity", "📝 Others"]
+    poll_question = "🌿 A strange seed has fallen in SoulGarden...\nWhat would you do if a digital flower grew that *rewarded you for being mindful*?"
 
-    try:
-        c.execute("SELECT id FROM users")
-        all_users = c.fetchall()
-        count = 0
+    options = [
+        "🌸 I’d water it daily 🌞",
+        "🤔 I'd watch and see what happens",
+        "🚫 Flowers aren't my thing",
+        "📚 Wait—what’s a digital flower?"
+    ]
 
-        for row in all_users:
-            user_id = row[0]
-            try:
-                bot.send_poll(
-                    chat_id=user_id,
-                    question=poll_question,
-                    options=options,
-                    is_anonymous=True,
-                    allows_multiple_answers=False
-                )
-                bot.send_message(
-                    user_id,
-                    "💡 If you selected 'Others' or have more feedback, use:\n/suggest <your idea>"
-                )
-                count += 1
-            except Exception as e:
-                print(f"[Poll Error] Could not message {user_id}: {e}")
+    bot.send_poll(
+        chat_id=msg.chat.id,
+        question=poll_question,
+        options=options,
+        is_anonymous=False,
+        allows_multiple_answers=False
+    )
 
-        bot.reply_to(msg, f"✅ Poll sent to {count} users.")
-    except Exception as e:
-        print(f"[Poll Broadcast Error]: {e}")
-        bot.reply_to(msg, "Something went wrong while sending the poll.")
+    bot.send_message(
+        msg.chat.id,
+        "🌱 Sometimes... rewards bloom for those who reflect. Stay curious. 👁️\nWant to share thoughts? Try /suggest."
+    )
 
 
 @bot.message_handler(commands=['suggest'])
