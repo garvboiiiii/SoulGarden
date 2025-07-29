@@ -55,7 +55,9 @@
     <p>{{ mem.text }}</p>
     {% if mem.voice %}
       <audio controls>
-        <source src="/{{ mem.voice }}" type="audio/ogg">
+        <source src="{{ url_for('static', filename=mem.voice) }}" type="audio/ogg">
+        <source src="{{ url_for('static', filename=mem.voice.replace('.ogg', '.mp3')) }}" type="audio/mpeg">
+        Your browser does not support audio playback.
       </audio>
     {% endif %}
   </div>
