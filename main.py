@@ -284,6 +284,43 @@ def handle_suggestion(msg):
     bot.send_message(ADMIN_ID, f"📩 New suggestion from {msg.from_user.id}:\n{suggestion}")
     bot.reply_to(msg, "✅ Thanks for your suggestion! Your thoughts help SoulGarden grow! 🌷")
 
+
+
+@bot.message_handler(commands=['broadcast'])
+def broadcast_all_users(msg):
+    if msg.from_user.id != ADMIN_ID:
+        bot.reply_to(msg, "❌ Only the admin can use this.")
+        return
+
+    parts = msg.text.split(maxsplit=1)
+    if len(parts) < 2:
+        bot.reply_to(msg, "📝 Usage:\n`/broadcast your message here`", parse_mode="Markdown")
+        return
+
+    announcement = parts[1].strip()
+
+    # Fetch all user IDs
+    try:
+        c.execute("SELECT id FROM users")
+        users = c.fetchall()
+
+        sent = 0
+        failed = 0
+
+        for row in users:
+            uid = row[0]
+            try:
+                bot.send_message(uid, f"📢 *Update from SoulGarden*\n\n{announcement}", parse_mode="Markdown")
+                sent += 1
+            except Exception as e:
+                print(f"❌ Couldn’t message {uid}: {e}")
+                failed += 1
+
+        bot.reply_to(msg, f"✅ Message sent to {sent} users. Failed: {failed}")
+    except Exception as e:
+        bot.reply_to(msg, f"❌ Error: {e}")
+        
+
 @bot.message_handler(commands=['feedback'])
 def feedback_cmd(msg):
     kb = telebot.types.InlineKeyboardMarkup()
