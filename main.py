@@ -1,6 +1,7 @@
 import os, random, telebot, traceback
 import psycopg2
 import pytz
+from pydub import AudioSegment
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template, abort
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
@@ -44,6 +45,7 @@ c.execute("""CREATE TABLE IF NOT EXISTS memories (
 
 pending_voice = {}
 pending_mood = {}
+MAX_FILE_SIZE_MB = 2
 
 MOOD_LABELS = {
     "🙂 Happy": 5,
@@ -422,11 +424,33 @@ def handle_voice(msg):
     if pending_voice.pop(uid, None):
         f = bot.get_file(msg.voice.file_id)
         data = bot.download_file(f.file_path)
-        path = f"static/voices/{uid}_{msg.message_id}.ogg"
-        with open(path, "wb") as fp:
+
+        # Check size
+        file_size_mb = len(data) / (1024 * 1024)
+        if file_size_mb > MAX_FILE_SIZE_MB:
+            bot.send_message(uid, f"⚠️ Voice note too large ({file_size_mb:.2f} MB). Max allowed: {MAX_FILE_SIZE_MB} MB.")
+            return
+
+        # Save OGG
+        filename_base = f"{uid}_{msg.message_id}"
+        ogg_path_rel = f"voices/{filename_base}.ogg"
+        ogg_path_full = os.path.join("static", ogg_path_rel)
+
+        with open(ogg_path_full, "wb") as fp:
             fp.write(data)
+
+        # Convert to MP3
+        try:
+            audio = AudioSegment.from_file(ogg_path_full)
+            mp3_path_full = os.path.join("static", f"voices/{filename_base}.mp3")
+            audio.export(mp3_path_full, format="mp3")
+        except Exception as e:
+            print("[Audio Conversion Error]", e)
+            bot.send_message(uid, "⚠️ Couldn't convert voice note to mp3, but .ogg was saved.")
+
+        # Save path for next step
         pending_mood[uid] = "(voice)"
-        pending_voice[uid] = path  # reuse for path
+        pending_voice[uid] = ogg_path_rel  # Only store the relative .ogg path
         kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         mood_buttons = list(MOOD_LABELS.keys()) + ["⏭️ Skip"]
         kb.add(*[KeyboardButton(b) for b in mood_buttons])
@@ -435,20 +459,34 @@ def handle_voice(msg):
 @bot.message_handler(func=lambda m: m.text in MOOD_LABELS or m.text == "⏭️ Skip")
 def handle_mood_choice(msg):
     uid = msg.from_user.id
-    text = pending_mood.pop(uid, None)
-    voice_path = pending_voice.pop(uid, None) if isinstance(pending_voice.get(uid), str) else None
 
+    # Get and validate memory text
+    text = pending_mood.pop(uid, None)
     if not text:
         bot.send_message(uid, "⚠️ Something went wrong. Please try again.", reply_markup=menu(uid))
         return
 
+    if len(text) > 800:
+        bot.send_message(uid, "⚠️ Your memory is too long to save. Please shorten it.", reply_markup=menu(uid))
+        return
+
+    # Get and validate voice path
+    voice_path = pending_voice.pop(uid, None)
+    if not isinstance(voice_path, str) or not voice_path.startswith("voices/"):
+        voice_path = None
+
+    # Determine mood value
     mood = MOOD_LABELS.get(msg.text) if msg.text != "⏭️ Skip" else None
 
+    # Save to DB
     c.execute("INSERT INTO memories VALUES (%s, %s, %s, %s, %s)",
               (uid, text, mood, datetime.now(timezone.utc), voice_path))
     c.execute("UPDATE users SET points = points + 1 WHERE id = %s", (uid,))
     s = get_stats(uid)
+
+    # Send confirmation
     bot.send_message(uid, f"💾 Saved!\nPoints: {s['points']}\n{motivation()}", reply_markup=menu(uid))
+
     
 
 
