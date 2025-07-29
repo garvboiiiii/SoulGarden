@@ -589,6 +589,21 @@ def dashboard(uid):
     return render_template("dashboard.html", name=u[0] or "anon", streak=u[1], points=u[2],
                            referrals=refs, memories=mems, mood_display=MOOD_DISPLAY)
 
+@app.route("/fix_voice_paths")
+def fix_voice_paths():
+    try:
+        c.execute("""
+            UPDATE memories
+            SET voice_path = REPLACE(voice_path, 'static/', '')
+            WHERE voice_path LIKE 'static/%'
+        """)
+        conn.commit()
+        return "✅ Voice paths updated in DB."
+    except Exception as e:
+        return f"❌ Error: {e}", 500
+
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
