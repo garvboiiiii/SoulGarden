@@ -237,18 +237,38 @@ def send_crypto_puzzle_poll(msg):
         "📚 Wait—what’s a digital flower?"
     ]
 
-    bot.send_poll(
-        chat_id=msg.chat.id,
-        question=poll_question,
-        options=options,
-        is_anonymous=False,
-        allows_multiple_answers=False
-    )
+    try:
+        with conn.cursor() as c:
+            c.execute("SELECT id FROM users")
+            user_ids = c.fetchall()
 
-    bot.send_message(
-        msg.chat.id,
-        "🌱 Sometimes... rewards bloom for those who reflect. Stay curious. 👁️\nWant to share thoughts? Try /suggest."
-    )
+        if not user_ids:
+            bot.reply_to(msg, "📭 No users found to send the poll.")
+            return
+
+        for row in user_ids:
+            uid = row[0]
+            try:
+                bot.send_poll(
+                    chat_id=uid,
+                    question=poll_question,
+                    options=options,
+                    is_anonymous=False,
+                    allows_multiple_answers=False
+                )
+                bot.send_message(
+                    chat_id=uid,
+                    text="🌱 Sometimes... rewards bloom for those who reflect. Stay curious. 👁️\nWant to share thoughts? Try /suggest."
+                )
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"Failed to send poll to {uid}: {e}")
+
+    except Exception as e:
+        print(f"[Poll Error] {e}")
+        bot.reply_to(msg, "❌ Something went wrong while sending the poll.")
+
+
 
 
 @bot.message_handler(commands=['suggest'])
