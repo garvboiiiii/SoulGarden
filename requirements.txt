@@ -1,5 +1,6 @@
 Flask==2.3.3
 pytz
+pydub
 pyTelegramBotAPI==4.14.0
 python-dotenv
 gunicorn==21.2.0
